@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+Icon?
+
+# Swift Package Manager
+.build/
+.swiftpm/
+dist/
+
+# Xcode user data and workspace state
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcuserdatad/
+*.xcuserstate
+
+# Derived data
+DerivedData/
+*.xcresult/
+*.xcarchive/
+*.dSYM/
+*.dSYM.zip
+
+# Common editor temp files
+*.swp
+*.swo
+*.log
+*.orig
+*.rej
+.idea/
+.vscode/
+.claude/
+.codex/
+.direnv/
+.envrc

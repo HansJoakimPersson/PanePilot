@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark this release as a prerelease"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+            prerelease="${{ inputs.prerelease }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+            prerelease="false"
+          fi
+          version="${tag#v}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build release package
+        run: make package CONFIGURATION=release VERSION="${{ steps.meta.outputs.version }}" BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+
+      - name: Create stable latest asset
+        run: cp "dist/PanePilot-${{ steps.meta.outputs.version }}-macOS.zip" "dist/PanePilot-latest-macOS.zip"
+
+      - name: Generate checksums
+        run: shasum -a 256 dist/* > "dist/PanePilot-${{ steps.meta.outputs.version }}-SHA256.txt"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+          PRE_RELEASE: ${{ steps.meta.outputs.prerelease }}
+        run: |
+          prerelease_flag=()
+          if [ "${PRE_RELEASE}" = "true" ]; then
+            prerelease_flag+=(--prerelease)
+          fi
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" dist/* --clobber
+          else
+            gh release create "${RELEASE_TAG}" dist/* \
+              --target "${GITHUB_SHA}" \
+              --title "PanePilot ${RELEASE_VERSION}" \
+              --generate-notes \
+              "${prerelease_flag[@]}"
+          fi

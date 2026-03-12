@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-package:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Show toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+      - name: Package app bundle
+        run: make package CONFIGURATION=release VERSION="ci-${GITHUB_RUN_NUMBER}" BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+
+      - name: Upload packaged app
+        uses: actions/upload-artifact@v4
+        with:
+          name: PanePilot-ci-build
+          path: dist/*
+          if-no-files-found: error
