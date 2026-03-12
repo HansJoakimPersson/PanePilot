@@ -35,7 +35,14 @@ jobs:
             prerelease="${{ inputs.prerelease }}"
           else
             tag="${GITHUB_REF_NAME}"
-            prerelease="false"
+            case "${tag}" in
+              *-alpha*|*-beta*|*-rc*)
+                prerelease="true"
+                ;;
+              *)
+                prerelease="false"
+                ;;
+            esac
           fi
           version="${tag#v}"
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
