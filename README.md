@@ -11,7 +11,7 @@
 <a href="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/ci.yml"><img src="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg?style=flat" alt="license"/></a>
 <a href="https://github.com/HansJoakimPersson/PanePilot"><img src="https://img.shields.io/badge/platform-macOS-0A84FF.svg?style=flat" alt="platform"/></a>
-<a href="https://github.com/HansJoakimPersson/PanePilot"><img src="https://img.shields.io/badge/Swift-6.1%2B-F05138.svg?style=flat&logo=swift&logoColor=white" alt="Swift 6.1+"/></a>
+<a href="https://github.com/HansJoakimPersson/PanePilot"><img src="https://img.shields.io/badge/Swift-6%20toolchain-F05138.svg?style=flat&logo=swift&logoColor=white" alt="Swift 6 toolchain"/></a>
 <a href="https://buymeacoffee.com/hansjoakimpersson"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-Support-FFDD00.svg?style=flat&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee"/></a>
 </div>
 
@@ -70,7 +70,7 @@ PanePilot uses the macOS Accessibility APIs to detect the active window, inspect
 ### Requirements
 
 - Xcode command line tools
-- Swift 6.1 or newer
+- A Swift 6 toolchain with SwiftPM tools support for 6.1
 
 ### Build steps
 
@@ -80,6 +80,8 @@ swift test
 make app
 make run
 ```
+
+You can also open `PanePilot.xcodeproj` in Xcode for app target management, signing, entitlements, and archive/export work.
 
 ## Support
 
