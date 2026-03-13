@@ -2,9 +2,16 @@ import AppKit
 import Foundation
 
 private let settingsBuiltInLayoutOrder = [
-    RegionLayouts.split20x80.id,
-    RegionLayouts.split80x20.id,
-    RegionLayouts.threeColumn.id,
+    RegionLayouts.split40x60.id,
+    RegionLayouts.split60x40.id,
+    RegionLayouts.wide.id,
+    RegionLayouts.wideMirror.id,
+    RegionLayouts.column.id,
+    RegionLayouts.widescreenTall.id,
+    RegionLayouts.widescreenTallMirror.id,
+    RegionLayouts.threeColumnLeft.id,
+    RegionLayouts.threeColumnMiddle.id,
+    RegionLayouts.threeColumnRight.id,
 ]
 
 private func orderedSettingsLayouts(_ source: [RegionLayout]) -> [RegionLayout] {

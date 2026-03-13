@@ -377,9 +377,9 @@ final class DisplayLayoutStore {
     // MARK: - Persistence
 
     private var defaultLayout: RegionLayout {
-        layoutsByID[RegionLayouts.threeColumn.id]
+        layoutsByID[RegionLayouts.split60x40.id]
             ?? allLayouts().first
-            ?? RegionLayouts.threeColumn
+            ?? RegionLayouts.split60x40
     }
 
     private var defaultLayoutID: String {
@@ -389,7 +389,13 @@ final class DisplayLayoutStore {
     private func load() {
         guard let data = try? Data(contentsOf: displayFileURL) else { return }
         guard let decoded = try? JSONDecoder().decode([DisplayRecord].self, from: data) else { return }
-        recordsByID = Dictionary(uniqueKeysWithValues: decoded.map { ($0.displayID, $0) })
+        recordsByID = Dictionary(
+            uniqueKeysWithValues: decoded.map { record in
+                var migratedRecord = record
+                migratedRecord.layoutID = RegionLayouts.canonicalLayoutID(for: record.layoutID)
+                return (migratedRecord.displayID, migratedRecord)
+            }
+        )
     }
 
     private func persist() {
@@ -404,7 +410,23 @@ final class DisplayLayoutStore {
     private func loadLayouts() {
         guard let data = try? Data(contentsOf: layoutsFileURL) else { return }
         guard let decoded = try? JSONDecoder().decode([RegionLayout].self, from: data) else { return }
-        let custom = Dictionary(uniqueKeysWithValues: decoded.map { ($0.id, $0) })
+        let custom = Dictionary(uniqueKeysWithValues: decoded.compactMap { layout -> (String, RegionLayout)? in
+            let canonicalID = RegionLayouts.canonicalLayoutID(for: layout.id)
+
+            // Retired built-in IDs are intentionally replaced by the new built-in catalog,
+            // so skip their persisted geometry instead of letting stale defaults override
+            // the current shipped layouts.
+            if layout.id != canonicalID, builtInLayoutIDs.contains(canonicalID) {
+                return nil
+            }
+
+            let migratedLayout = RegionLayout(
+                id: canonicalID,
+                name: layout.name,
+                regions: layout.regions
+            )
+            return (migratedLayout.id, migratedLayout)
+        })
         // Merge persisted over defaults to keep user-created layouts.
         layoutsByID.merge(custom, uniquingKeysWith: { _, persisted in persisted })
     }

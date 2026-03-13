@@ -33,7 +33,7 @@ Public notarized downloads are not available yet.
 
 - Runs from the macOS menu bar.
 - Reveals snap regions only while you drag with a configurable modifier key.
-- Includes built-in `20 / 80`, `80 / 20`, and `Three Column` layouts.
+- Includes built-in `40 / 60`, `60 / 40`, `Wide`, mirrored widescreen layouts, and multi-column layouts inspired by Amethyst.
 - Lets each connected display keep its own preferred layout.
 - Supports top-half and bottom-half snaps inside a matching region.
 - Exposes Start at Login for signed app bundles.
