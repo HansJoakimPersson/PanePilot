@@ -29,12 +29,20 @@ jobs:
       - name: Test
         run: swift test
 
+      - name: Resolve bundle version
+        id: version
+        run: |
+          marketing_version="$(awk -F' = ' '/^MARKETING_VERSION = / { print $2; exit }' Config/Version.xcconfig)"
+          build_number="$(awk -F' = ' '/^CURRENT_PROJECT_VERSION = / { print $2; exit }' Config/Version.xcconfig)"
+          echo "marketing_version=${marketing_version}" >> "${GITHUB_OUTPUT}"
+          echo "build_number=${build_number}" >> "${GITHUB_OUTPUT}"
+
       - name: Package app bundle
-        run: make package CONFIGURATION=release VERSION="ci-${GITHUB_RUN_NUMBER}" BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+        run: make package CONFIGURATION=release VERSION="${{ steps.version.outputs.marketing_version }}" BUILD_NUMBER="${{ steps.version.outputs.build_number }}"
 
       - name: Upload packaged app
         uses: actions/upload-artifact@v4
         with:
-          name: PanePilot-ci-build
+          name: PanePilot-ci-build-${{ steps.version.outputs.marketing_version }}
           path: dist/*
           if-no-files-found: error

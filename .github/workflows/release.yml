@@ -30,6 +30,9 @@ jobs:
       - name: Resolve release metadata
         id: meta
         run: |
+          marketing_version="$(awk -F' = ' '/^MARKETING_VERSION = / { print $2; exit }' Config/Version.xcconfig)"
+          build_number="$(awk -F' = ' '/^CURRENT_PROJECT_VERSION = / { print $2; exit }' Config/Version.xcconfig)"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             tag="${{ inputs.tag }}"
             prerelease="${{ inputs.prerelease }}"
@@ -44,13 +47,18 @@ jobs:
                 ;;
             esac
           fi
-          version="${tag#v}"
+          tag_version="${tag#v}"
+          if [ "${tag_version}" != "${marketing_version}" ]; then
+            echo "Release tag ${tag} does not match Config/Version.xcconfig MARKETING_VERSION=${marketing_version}" >&2
+            exit 1
+          fi
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "version=${marketing_version}" >> "${GITHUB_OUTPUT}"
+          echo "build_number=${build_number}" >> "${GITHUB_OUTPUT}"
           echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
 
       - name: Build release package
-        run: make package CONFIGURATION=release VERSION="${{ steps.meta.outputs.version }}" BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+        run: make package CONFIGURATION=release VERSION="${{ steps.meta.outputs.version }}" BUILD_NUMBER="${{ steps.meta.outputs.build_number }}"
 
       - name: Create stable latest asset
         run: cp "dist/PanePilot-${{ steps.meta.outputs.version }}-macOS.zip" "dist/PanePilot-latest-macOS.zip"

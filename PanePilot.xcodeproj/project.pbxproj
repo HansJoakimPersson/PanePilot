@@ -1,4 +1,4 @@
-// !UTF8*24945
+// !$*UTF8*$!
 {
 	archiveVersion = 1;
 	classes = {
@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00000000000000000000002C /* PanePilotKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000B /* PanePilotKit.framework */; };
+		00000000000000000000002D /* PanePilotKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000B /* PanePilotKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		00000000000000000000002E /* PanePilotKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000B /* PanePilotKit.framework */; };
+		00000000000000000000002F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000032 /* Assets.xcassets */; };
 		000000000000000000000031 /* PanePilot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000030 /* PanePilot.swift */; };
 		000000000000000000000034 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000033 /* AppDelegate.swift */; };
 		000000000000000000000036 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000035 /* AppError.swift */; };
@@ -28,21 +32,17 @@
 		000000000000000000000056 /* WindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000055 /* WindowController.swift */; };
 		000000000000000000000058 /* LayoutEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000057 /* LayoutEngineTests.swift */; };
 		00000000000000000000005A /* RegionLayoutsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000059 /* RegionLayoutsTests.swift */; };
-		00000000000000000000002C /* PanePilotKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000B /* PanePilotKit.framework */; };
-		00000000000000000000002D /* PanePilotKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000B /* PanePilotKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		00000000000000000000002E /* PanePilotKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000B /* PanePilotKit.framework */; };
-		00000000000000000000002F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000032 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		000000000000000000000028 = {
+		000000000000000000000028 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 000000000000000000000001 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 000000000000000000000011;
 			remoteInfo = PanePilotKit;
 		};
-		00000000000000000000002A = {
+		00000000000000000000002A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 000000000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -52,7 +52,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		000000000000000000000016 = {
+		000000000000000000000016 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
@@ -66,6 +66,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		00000000000000000000000A /* PanePilot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PanePilot.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		00000000000000000000000B /* PanePilotKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = PanePilotKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		00000000000000000000000C /* PanePilotKitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PanePilotKitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		00000000000000000000000D /* Config/PanePilot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Config/PanePilot.entitlements; sourceTree = SOURCE_ROOT; };
+		00000000000000000000000F /* Config/ExportOptions-app-store.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/ExportOptions-app-store.plist"; sourceTree = SOURCE_ROOT; };
+		000000000000000000000060 /* Config/Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Version.xcconfig; sourceTree = SOURCE_ROOT; };
 		000000000000000000000030 /* PanePilot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PanePilot.swift; path = Sources/PanePilot/PanePilot.swift; sourceTree = SOURCE_ROOT; };
 		000000000000000000000032 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Sources/PanePilot/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 		000000000000000000000033 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Sources/PanePilotKit/AppDelegate.swift; sourceTree = SOURCE_ROOT; };
@@ -88,15 +94,10 @@
 		000000000000000000000055 /* WindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WindowController.swift; path = Sources/PanePilotKit/WindowController.swift; sourceTree = SOURCE_ROOT; };
 		000000000000000000000057 /* LayoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LayoutEngineTests.swift; path = Tests/PanePilotKitTests/LayoutEngineTests.swift; sourceTree = SOURCE_ROOT; };
 		000000000000000000000059 /* RegionLayoutsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RegionLayoutsTests.swift; path = Tests/PanePilotKitTests/RegionLayoutsTests.swift; sourceTree = SOURCE_ROOT; };
-		00000000000000000000000A /* PanePilot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PanePilot.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		00000000000000000000000B /* PanePilotKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = PanePilotKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		00000000000000000000000C /* PanePilotKitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PanePilotKitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		00000000000000000000000D /* PanePilot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Config/PanePilot.entitlements; sourceTree = SOURCE_ROOT; };
-		00000000000000000000000F /* ExportOptions-app-store.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Config/ExportOptions-app-store.plist; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		000000000000000000000014 = {
+		000000000000000000000014 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -104,14 +105,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		000000000000000000000018 = {
+		000000000000000000000018 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		00000000000000000000001A = {
+		00000000000000000000001A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -126,14 +127,14 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000004 /* Sources */,
-				000000000000000000000007 /* Tests */,
+				000000000000000000000007 /* PanePilotKitTests */,
 				000000000000000000000008 /* Config */,
 				000000000000000000000009 /* Frameworks */,
 				000000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		000000000000000000000003 = {
+		000000000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				00000000000000000000000A /* PanePilot.app */,
@@ -143,17 +144,16 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		000000000000000000000004 = {
+		000000000000000000000004 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
 				000000000000000000000005 /* PanePilot */,
 				000000000000000000000006 /* PanePilotKit */,
 			);
-			name = Sources;
 			path = Sources;
 			sourceTree = SOURCE_ROOT;
 		};
-		000000000000000000000005 = {
+		000000000000000000000005 /* PanePilot */ = {
 			isa = PBXGroup;
 			children = (
 				000000000000000000000030 /* PanePilot.swift */,
@@ -163,7 +163,7 @@
 			path = Sources/PanePilot;
 			sourceTree = SOURCE_ROOT;
 		};
-		000000000000000000000006 = {
+		000000000000000000000006 /* PanePilotKit */ = {
 			isa = PBXGroup;
 			children = (
 				000000000000000000000033 /* AppDelegate.swift */,
@@ -189,7 +189,7 @@
 			path = Sources/PanePilotKit;
 			sourceTree = SOURCE_ROOT;
 		};
-		000000000000000000000007 = {
+		000000000000000000000007 /* PanePilotKitTests */ = {
 			isa = PBXGroup;
 			children = (
 				000000000000000000000057 /* LayoutEngineTests.swift */,
@@ -199,17 +199,17 @@
 			path = Tests/PanePilotKitTests;
 			sourceTree = SOURCE_ROOT;
 		};
-		000000000000000000000008 = {
+		000000000000000000000008 /* Config */ = {
 			isa = PBXGroup;
 			children = (
-				00000000000000000000000D /* PanePilot.entitlements */,
-				00000000000000000000000F /* ExportOptions-app-store.plist */,
+				00000000000000000000000D /* Config/PanePilot.entitlements */,
+				00000000000000000000000F /* Config/ExportOptions-app-store.plist */,
+				000000000000000000000060 /* Config/Version.xcconfig */,
 			);
-			name = Config;
 			path = Config;
 			sourceTree = SOURCE_ROOT;
 		};
-		000000000000000000000009 = {
+		000000000000000000000009 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -219,7 +219,7 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		000000000000000000000010 = {
+		000000000000000000000010 /* PanePilot */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 00000000000000000000001C /* Build configuration list for PBXNativeTarget "PanePilot" */;
 			buildPhases = (
@@ -238,7 +238,7 @@
 			productReference = 00000000000000000000000A /* PanePilot.app */;
 			productType = "com.apple.product-type.application";
 		};
-		000000000000000000000011 = {
+		000000000000000000000011 /* PanePilotKit */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 00000000000000000000001D /* Build configuration list for PBXNativeTarget "PanePilotKit" */;
 			buildPhases = (
@@ -254,7 +254,7 @@
 			productReference = 00000000000000000000000B /* PanePilotKit.framework */;
 			productType = "com.apple.product-type.framework";
 		};
-		000000000000000000000012 = {
+		000000000000000000000012 /* PanePilotKitTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 00000000000000000000001E /* Build configuration list for PBXNativeTarget "PanePilotKitTests" */;
 			buildPhases = (
@@ -281,16 +281,26 @@
 				BuildIndependentTargetsInParallel = 1;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
-					000000000000000000000010 = { CreatedOnToolsVersion = 26.3; };
-					000000000000000000000011 = { CreatedOnToolsVersion = 26.3; };
-					000000000000000000000012 = { CreatedOnToolsVersion = 26.3; TestTargetID = 000000000000000000000011; };
+					000000000000000000000010 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					000000000000000000000011 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					000000000000000000000012 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 000000000000000000000011;
+					};
 				};
 			};
 			buildConfigurationList = 00000000000000000000001F /* Build configuration list for PBXProject "PanePilot" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
-			knownRegions = (en, Base, );
+			knownRegions = (
+				en,
+				Base,
+			);
 			mainGroup = 000000000000000000000002;
 			productRefGroup = 000000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -304,7 +314,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		000000000000000000000015 = {
+		000000000000000000000015 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -312,7 +322,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		00000000000000000000001B = {
+		00000000000000000000001B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -322,7 +332,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		000000000000000000000013 = {
+		000000000000000000000013 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -330,7 +340,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		000000000000000000000017 = {
+		000000000000000000000017 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -355,7 +365,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		000000000000000000000019 = {
+		000000000000000000000019 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -367,31 +377,43 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		000000000000000000000029 = {isa = PBXTargetDependency; name = PanePilotKit; targetProxy = 000000000000000000000028; };
-		00000000000000000000002B = {isa = PBXTargetDependency; name = PanePilotKit; targetProxy = 00000000000000000000002A; };
+		000000000000000000000029 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PanePilotKit;
+			target = 000000000000000000000011 /* PanePilotKit */;
+			targetProxy = 000000000000000000000028 /* PBXContainerItemProxy */;
+		};
+		00000000000000000000002B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PanePilotKit;
+			target = 000000000000000000000011 /* PanePilotKit */;
+			targetProxy = 00000000000000000000002A /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		000000000000000000000020 = {
+		000000000000000000000020 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000060 /* Config/Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-					CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_MODULES = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				SDKROOT = macosx;
-					SWIFT_VERSION = 6;
+				SWIFT_VERSION = 6;
 			};
 			name = Debug;
 		};
-		000000000000000000000021 = {
+		000000000000000000000021 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000060 /* Config/Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-					CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_MODULES = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -400,17 +422,17 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
-					SWIFT_VERSION = 6;
+				SWIFT_VERSION = 6;
 			};
 			name = Release;
 		};
-		000000000000000000000022 = {
+		000000000000000000000022 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000060 /* Config/Version.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGN_ENTITLEMENTS = Config/PanePilot.entitlements;
-				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PanePilot;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -418,21 +440,23 @@
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSAccessibilityUsageDescription = "PanePilot needs Accessibility access to detect window positions and resize windows.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", );
-				MARKETING_VERSION = 0.1.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.panepilot.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 			};
 			name = Debug;
 		};
-		000000000000000000000023 = {
+		000000000000000000000023 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000060 /* Config/Version.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Config/PanePilot.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PanePilot;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -440,69 +464,75 @@
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSAccessibilityUsageDescription = "PanePilot needs Accessibility access to detect window positions and resize windows.";
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", );
-				MARKETING_VERSION = 0.1.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.panepilot.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 			};
 			name = Release;
 		};
-		000000000000000000000024 = {
+		000000000000000000000024 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000060 /* Config/Version.xcconfig */;
 			buildSettings = {
 				CODE_SIGNING_ALLOWED = NO;
 				DEFINES_MODULE = YES;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@loader_path/../Frameworks", "@loader_path/Frameworks", );
-				MARKETING_VERSION = 0.1.0;
-				CURRENT_PROJECT_VERSION = 1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@loader_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.panepilot.app.PanePilotKit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 			};
 			name = Debug;
 		};
-		000000000000000000000025 = {
+		000000000000000000000025 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000060 /* Config/Version.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				DEFINES_MODULE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@loader_path/../Frameworks", "@loader_path/Frameworks", );
-				MARKETING_VERSION = 0.1.0;
-				CURRENT_PROJECT_VERSION = 1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@loader_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.panepilot.app.PanePilotKit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 			};
 			name = Release;
 		};
-		000000000000000000000026 = {
+		000000000000000000000026 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000060 /* Config/Version.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "";
 				CODE_SIGNING_ALLOWED = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
-				CURRENT_PROJECT_VERSION = 1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.panepilot.app.PanePilotKitTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_TARGET_NAME = PanePilotKit;
 			};
 			name = Debug;
 		};
-		000000000000000000000027 = {
+		000000000000000000000027 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 000000000000000000000060 /* Config/Version.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
-				CURRENT_PROJECT_VERSION = 1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.panepilot.app.PanePilotKitTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_TARGET_NAME = PanePilotKit;
@@ -512,38 +542,38 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		00000000000000000000001F = {
+		00000000000000000000001C /* Build configuration list for PBXNativeTarget "PanePilot" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				000000000000000000000020,
-				000000000000000000000021,
+				000000000000000000000022 /* Debug */,
+				000000000000000000000023 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		00000000000000000000001C = {
+		00000000000000000000001D /* Build configuration list for PBXNativeTarget "PanePilotKit" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				000000000000000000000022,
-				000000000000000000000023,
+				000000000000000000000024 /* Debug */,
+				000000000000000000000025 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		00000000000000000000001D = {
+		00000000000000000000001E /* Build configuration list for PBXNativeTarget "PanePilotKitTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				000000000000000000000024,
-				000000000000000000000025,
+				000000000000000000000026 /* Debug */,
+				000000000000000000000027 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		00000000000000000000001E = {
+		00000000000000000000001F /* Build configuration list for PBXProject "PanePilot" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				000000000000000000000026,
-				000000000000000000000027,
+				000000000000000000000020 /* Debug */,
+				000000000000000000000021 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

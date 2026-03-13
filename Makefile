@@ -3,10 +3,11 @@ BUNDLE_ID  := com.panepilot.app
 BUILD_DIR  := .build
 APP_BUNDLE := $(BUILD_DIR)/$(APP_NAME).app
 DIST_DIR   := dist
+VERSION_CONFIG := Config/Version.xcconfig
 
 CONFIGURATION ?= debug
-VERSION       ?= 0.1.0
-BUILD_NUMBER  ?= 1
+VERSION       ?= $(shell awk -F' = ' '/^MARKETING_VERSION = / { print $$2; exit }' $(VERSION_CONFIG))
+BUILD_NUMBER  ?= $(shell awk -F' = ' '/^CURRENT_PROJECT_VERSION = / { print $$2; exit }' $(VERSION_CONFIG))
 SIGN_IDENTITY ?= -
 
 SWIFT_BUILD_FLAGS :=
