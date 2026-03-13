@@ -4,6 +4,8 @@ final class DebugLogger: @unchecked Sendable {
     static let shared = DebugLogger()
 
     let logFileURL: URL
+    // File I/O stays off the main thread and serialized through one queue to keep logging
+    // low-risk even when multiple parts of the app emit diagnostics at once.
     private let queue = DispatchQueue(label: "PanePilot.DebugLogger", qos: .utility)
     private var loggingEnabled: Bool
 
@@ -23,6 +25,8 @@ final class DebugLogger: @unchecked Sendable {
         }
     }
 
+    // MARK: - Public Logging API
+
     func info(_ message: String) {
         guard isEnabled() else { return }
         write(level: "INFO", message: message)
@@ -38,6 +42,8 @@ final class DebugLogger: @unchecked Sendable {
         write(level: "ERROR", message: message)
     }
 
+    // MARK: - State
+
     func setEnabled(_ enabled: Bool) {
         loggingEnabled = enabled
         AppPreferences.debugLoggingEnabled = enabled
@@ -49,6 +55,8 @@ final class DebugLogger: @unchecked Sendable {
     func isEnabled() -> Bool {
         loggingEnabled
     }
+
+    // MARK: - File Output
 
     private func write(level: String, message: String) {
         let timestamp = ISO8601DateFormatter().string(from: Date())

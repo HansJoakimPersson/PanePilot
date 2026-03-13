@@ -7,6 +7,8 @@ enum SnapModifier: String, CaseIterable {
     case command
     case shift
 
+    // MARK: - Presentation
+
     var displayName: String {
         switch self {
         case .control: return "Control"
@@ -15,6 +17,8 @@ enum SnapModifier: String, CaseIterable {
         case .shift: return "Shift"
         }
     }
+
+    // MARK: - NSEvent Bridge
 
     var eventFlag: NSEvent.ModifierFlags {
         switch self {
@@ -25,4 +29,3 @@ enum SnapModifier: String, CaseIterable {
         }
     }
 }
-

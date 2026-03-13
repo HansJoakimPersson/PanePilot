@@ -2,6 +2,8 @@ import XCTest
 @testable import PanePilotKit
 
 final class RegionLayoutsTests: XCTestCase {
+    // MARK: - Built-In Layouts
+
     func testBuiltInLayoutsStayAvailable() {
         XCTAssertEqual(RegionLayouts.all.map(\.id), [
             "split-20-80",

@@ -5,6 +5,7 @@ struct RegionLayout: Codable {
     struct Region: Codable {
         let id: Int
         let name: String
+        // Stored in normalized 0...1 display coordinates so layouts scale to any screen.
         let normalizedFrame: CGRect
     }
 
@@ -14,6 +15,8 @@ struct RegionLayout: Codable {
 }
 
 enum RegionLayouts {
+    // MARK: - Built-In Layouts
+
     static let split20x80 = makeColumns(
         id: "split-20-80",
         name: "20 / 80",
@@ -42,9 +45,13 @@ enum RegionLayouts {
         threeColumn,
     ]
 
+    // MARK: - Lookup
+
     static func find(by id: String) -> RegionLayout? {
         all.first { $0.id == id.lowercased() }
     }
+
+    // MARK: - Factories
 
     static func makeColumns(id: String, name: String, columnFractions: [CGFloat]) -> RegionLayout {
         let total = columnFractions.reduce(0, +)

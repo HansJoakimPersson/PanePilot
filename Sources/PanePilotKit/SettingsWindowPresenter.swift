@@ -11,10 +11,14 @@ public final class SettingsWindowPresenter {
 
     private init() {}
 
+    // MARK: - Configuration
+
     func configure(store: DisplayLayoutStore, dragSnapController: DragSnapController) {
         self.store = store
         self.dragSnapController = dragSnapController
     }
+
+    // MARK: - Presentation
 
     public func show() {
         DebugLogger.shared.info("SettingsWindowPresenter.show: entered.")
@@ -39,10 +43,7 @@ public final class SettingsWindowPresenter {
             return
         }
 
-        NSApp.setActivationPolicy(.regular)
-        NSApp.applicationIconImage = AppIconProvider.applicationIconImage()
-        NSApp.dockTile.display()
-        NSApp.activate(ignoringOtherApps: true)
+        prepareApplicationForSettingsWindow()
         DebugLogger.shared.info("SettingsWindowPresenter.showOnMain: presenting settings window.")
         controller.present()
         if let window = controller.window {
@@ -52,6 +53,21 @@ public final class SettingsWindowPresenter {
             )
         }
     }
+
+    // Settings lives in a regular app window, so temporarily promote the menu-bar app
+    // while the window is onscreen and restore accessory mode when it closes.
+    private func prepareApplicationForSettingsWindow() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.applicationIconImage = AppIconProvider.applicationIconImage()
+        NSApp.dockTile.display()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func restoreAccessoryMode() {
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    // MARK: - Controller Lifecycle
 
     private func makeController(store: DisplayLayoutStore) -> SettingsWindowController {
         let controller = SettingsWindowController(
@@ -69,7 +85,7 @@ public final class SettingsWindowPresenter {
         controller.onWindowClosed = { [weak self] in
             DebugLogger.shared.info("SettingsWindowPresenter: window closed.")
             self?.controller = nil
-            NSApp.setActivationPolicy(.accessory)
+            self?.restoreAccessoryMode()
         }
 
         return controller

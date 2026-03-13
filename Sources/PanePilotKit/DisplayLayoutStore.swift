@@ -16,11 +16,15 @@ struct DisplayRecord: Codable {
 
 @MainActor
 final class DisplayLayoutStore {
+    // Display assignments and layout definitions are persisted separately so connected
+    // display state can evolve without rewriting the full set of available layouts.
     private let displayFileURL: URL
     private let layoutsFileURL: URL
     private var recordsByID: [String: DisplayRecord] = [:]
     private var layoutsByID: [String: RegionLayout] = [:]
     private let builtInLayoutIDs: Set<String>
+
+    // MARK: - Initialization
 
     init(layouts: [RegionLayout]) {
         self.builtInLayoutIDs = Set(layouts.map(\.id))
@@ -37,6 +41,8 @@ final class DisplayLayoutStore {
         loadLayouts()
         load()
     }
+
+    // MARK: - Display Assignments
 
     func refreshConnectedDisplays() {
         let now = Date()
@@ -109,74 +115,53 @@ final class DisplayLayoutStore {
         recordsByID[displayID]?.layoutID ?? defaultLayoutID
     }
 
+    // MARK: - Layout Catalog
+
     func allLayouts() -> [RegionLayout] {
         layoutsByID.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     func addColumnLayout(name: String, columns: Int) -> RegionLayout {
         let clampedColumns = max(2, min(columns, 24))
-        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseName = cleanName.isEmpty ? "\(clampedColumns) Columns" : cleanName
-
-        var uniqueName = baseName
-        var suffix = 2
-        while layoutsByID.values.contains(where: { $0.name.localizedCaseInsensitiveCompare(uniqueName) == .orderedSame }) {
-            uniqueName = "\(baseName) \(suffix)"
-            suffix += 1
-        }
-
-        let layoutID = "custom-\(UUID().uuidString.lowercased())"
         let fractions = Array(repeating: CGFloat(1), count: clampedColumns)
-        let layout = RegionLayouts.makeColumns(id: layoutID, name: uniqueName, columnFractions: fractions)
-        layoutsByID[layoutID] = layout
-        persistLayouts()
-        return layout
+        return saveLayout(
+            RegionLayouts.makeColumns(
+                id: customLayoutID(),
+                name: uniqueLayoutName(from: name, fallback: "\(clampedColumns) Columns"),
+                columnFractions: fractions
+            )
+        )
     }
 
     func addFullscreenLayout(name: String) -> RegionLayout {
-        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseName = cleanName.isEmpty ? "New Layout" : cleanName
-
-        var uniqueName = baseName
-        var suffix = 2
-        while layoutsByID.values.contains(where: { $0.name.localizedCaseInsensitiveCompare(uniqueName) == .orderedSame }) {
-            uniqueName = "\(baseName) \(suffix)"
-            suffix += 1
-        }
-
-        let layoutID = "custom-\(UUID().uuidString.lowercased())"
-        let layout = RegionLayout(
-            id: layoutID,
-            name: uniqueName,
-            regions: [
-                RegionLayout.Region(
-                    id: 1,
-                    name: "Region 1",
-                    normalizedFrame: CGRect(x: 0, y: 0, width: 1, height: 1)
-                ),
-            ]
+        saveLayout(
+            RegionLayout(
+                id: customLayoutID(),
+                name: uniqueLayoutName(from: name, fallback: "New Layout"),
+                regions: [
+                    RegionLayout.Region(
+                        id: 1,
+                        name: "Region 1",
+                        normalizedFrame: CGRect(x: 0, y: 0, width: 1, height: 1)
+                    ),
+                ]
+            )
         )
-        layoutsByID[layoutID] = layout
-        persistLayouts()
-        return layout
     }
 
     @discardableResult
     func renameLayout(id: String, to name: String) -> Bool {
-        guard isLayoutEditable(id: id), var layout = layoutsByID[id] else { return false }
+        guard isLayoutEditable(id: id), let layout = layoutsByID[id] else { return false }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
 
-        var uniqueName = trimmed
-        var suffix = 2
-        while layoutsByID.values.contains(where: { $0.id != id && $0.name.localizedCaseInsensitiveCompare(uniqueName) == .orderedSame }) {
-            uniqueName = "\(trimmed) \(suffix)"
-            suffix += 1
-        }
-
-        layout = RegionLayout(id: layout.id, name: uniqueName, regions: layout.regions)
-        layoutsByID[id] = layout
-        persistLayouts()
+        _ = saveLayout(
+            RegionLayout(
+                id: layout.id,
+                name: uniqueLayoutName(from: trimmed, fallback: trimmed, excluding: id),
+                regions: layout.regions
+            )
+        )
         return true
     }
 
@@ -203,6 +188,8 @@ final class DisplayLayoutStore {
     func isLayoutEditable(id: String) -> Bool {
         !builtInLayoutIDs.contains(id)
     }
+
+    // MARK: - Layout Editing
 
     func splitRegion(layoutID: String, regionID: Int, axis: SplitAxis, ratio: CGFloat) -> RegionLayout? {
         guard isLayoutEditable(id: layoutID), var layout = layoutsByID[layoutID] else { return nil }
@@ -272,9 +259,7 @@ final class DisplayLayoutStore {
         regions = reindexRegions(regions)
 
         layout = RegionLayout(id: layout.id, name: layout.name, regions: regions)
-        layoutsByID[layout.id] = layout
-        persistLayouts()
-        return layout
+        return saveLayout(layout)
     }
 
     func canMergeRegions(layoutID: String, firstRegionID: Int, secondRegionID: Int) -> Bool {
@@ -308,9 +293,7 @@ final class DisplayLayoutStore {
         )
         regions = reindexRegions(regions)
         layout = RegionLayout(id: layout.id, name: layout.name, regions: regions)
-        layoutsByID[layout.id] = layout
-        persistLayouts()
-        return layout
+        return saveLayout(layout)
     }
 
     func resizeAdjacentRegions(layoutID: String, firstRegionID: Int, secondRegionID: Int, ratio: CGFloat) -> RegionLayout? {
@@ -376,9 +359,7 @@ final class DisplayLayoutStore {
         regions[firstIndex] = RegionLayout.Region(id: first.id, name: first.name, normalizedFrame: firstFrame)
         regions[secondIndex] = RegionLayout.Region(id: second.id, name: second.name, normalizedFrame: secondFrame)
         layout = RegionLayout(id: layout.id, name: layout.name, regions: regions)
-        layoutsByID[layout.id] = layout
-        persistLayouts()
-        return layout
+        return saveLayout(layout)
     }
 
     func setEqualColumns(layoutID: String, columns: Int) -> RegionLayout? {
@@ -390,10 +371,10 @@ final class DisplayLayoutStore {
             name: layout.name,
             columnFractions: fractions
         )
-        layoutsByID[layout.id] = updated
-        persistLayouts()
-        return updated
+        return saveLayout(updated)
     }
+
+    // MARK: - Persistence
 
     private var defaultLayout: RegionLayout {
         layoutsByID[RegionLayouts.threeColumn.id]
@@ -434,6 +415,34 @@ final class DisplayLayoutStore {
         let layouts = allLayouts()
         guard let data = try? encoder.encode(layouts) else { return }
         try? data.write(to: layoutsFileURL, options: .atomic)
+    }
+
+    // MARK: - Layout Utilities
+
+    @discardableResult
+    private func saveLayout(_ layout: RegionLayout) -> RegionLayout {
+        layoutsByID[layout.id] = layout
+        persistLayouts()
+        return layout
+    }
+
+    private func customLayoutID() -> String {
+        "custom-\(UUID().uuidString.lowercased())"
+    }
+
+    private func uniqueLayoutName(from proposedName: String, fallback: String, excluding excludedID: String? = nil) -> String {
+        let trimmed = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseName = trimmed.isEmpty ? fallback : trimmed
+
+        var uniqueName = baseName
+        var suffix = 2
+        while layoutsByID.values.contains(where: {
+            $0.id != excludedID && $0.name.localizedCaseInsensitiveCompare(uniqueName) == .orderedSame
+        }) {
+            uniqueName = "\(baseName) \(suffix)"
+            suffix += 1
+        }
+        return uniqueName
     }
 
     private func reindexRegions(_ regions: [RegionLayout.Region]) -> [RegionLayout.Region] {

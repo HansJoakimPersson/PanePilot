@@ -16,7 +16,11 @@ enum SplitEdge: String {
 }
 
 struct LayoutEngine {
+    // MARK: - Edge-Based Frames
+
     func frame(for screen: CGRect, edge: SplitEdge, ratio: Double) -> CGRect {
+        // Ratios come from UI and automation inputs, so clamp once here instead of
+        // expecting each caller to sanitize the value the same way.
         let clamped = min(max(ratio, 0.0), 1.0)
         let width = screen.width
         let height = screen.height
@@ -55,7 +59,11 @@ struct LayoutEngine {
         }
     }
 
+    // MARK: - Region-Based Frames
+
     func frame(for screen: CGRect, region: RegionLayout.Region) -> CGRect {
+        // Region layouts store normalized coordinates in 0...1 space relative to the
+        // visible display area, which keeps them portable across screen sizes.
         CGRect(
             x: screen.minX + (screen.width * region.normalizedFrame.minX),
             y: screen.minY + (screen.height * region.normalizedFrame.minY),

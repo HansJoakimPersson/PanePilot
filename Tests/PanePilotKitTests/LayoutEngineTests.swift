@@ -3,6 +3,8 @@ import XCTest
 @testable import PanePilotKit
 
 final class LayoutEngineTests: XCTestCase {
+    // MARK: - Edge Frames
+
     func testLeftEdgeFrameClampsRatioAboveOne() {
         let engine = LayoutEngine()
         let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
@@ -20,6 +22,8 @@ final class LayoutEngineTests: XCTestCase {
 
         XCTAssertEqual(frame, CGRect(x: 100, y: 650, width: 1200, height: 200))
     }
+
+    // MARK: - Region Frames
 
     func testRegionFrameMapsNormalizedCoordinatesToDisplay() {
         let engine = LayoutEngine()

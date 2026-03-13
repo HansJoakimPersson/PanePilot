@@ -1,6 +1,20 @@
 import AppKit
 import Foundation
 
+private let settingsBuiltInLayoutOrder = [
+    RegionLayouts.split20x80.id,
+    RegionLayouts.split80x20.id,
+    RegionLayouts.threeColumn.id,
+]
+
+private func orderedSettingsLayouts(_ source: [RegionLayout]) -> [RegionLayout] {
+    let builtIns = settingsBuiltInLayoutOrder.compactMap { id in source.first(where: { $0.id == id }) }
+    let custom = source
+        .filter { !settingsBuiltInLayoutOrder.contains($0.id) }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    return builtIns + custom
+}
+
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var onWindowClosed: (() -> Void)?
@@ -11,6 +25,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let displaysViewController: DisplaysSettingsViewController
     private let debugViewController: DebugSettingsViewController
     private let aboutViewController = AboutSettingsViewController()
+
+    // MARK: - Initialization
+
     init(
         store: DisplayLayoutStore,
         initialSnapModifier: SnapModifier,
@@ -31,14 +48,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "General"
-        window.contentMinSize = NSSize(width: 450, height: 430)
-        window.contentMaxSize = NSSize(width: 450, height: 430)
-        window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.moveToActiveSpace]
 
         super.init(window: window)
 
+        configureWindow(window)
         configureTabs()
         wireEvents()
 
@@ -46,7 +59,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.delegate = self
         window.center()
         updateWindowTitle()
-
     }
 
     @available(*, unavailable)
@@ -54,11 +66,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
 
+    // MARK: - Presentation
+
     func present() {
-        generalViewController.refreshFromSystem()
-        layoutsViewController.reloadLayouts(selectLayoutID: nil)
-        displaysViewController.reloadAll(selectDisplayID: nil)
-        debugViewController.refreshState()
+        refreshContent()
         updateWindowTitle()
 
         guard let window else { return }
@@ -68,9 +79,28 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    // MARK: - NSWindowDelegate
+
     func windowWillClose(_ notification: Notification) {
         DebugLogger.shared.info("Settings window closed.")
         onWindowClosed?()
+    }
+
+    // MARK: - Configuration
+
+    private func configureWindow(_ window: NSWindow) {
+        window.title = "General"
+        window.contentMinSize = NSSize(width: 450, height: 430)
+        window.contentMaxSize = NSSize(width: 450, height: 430)
+        window.isReleasedWhenClosed = false
+        window.collectionBehavior = [.moveToActiveSpace]
+    }
+
+    private func refreshContent() {
+        generalViewController.refreshFromSystem()
+        layoutsViewController.reloadLayouts(selectLayoutID: nil)
+        displaysViewController.reloadAll(selectDisplayID: nil)
+        debugViewController.refreshState()
     }
 
     private func configureTabs() {
@@ -79,31 +109,33 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             self?.updateWindowTitle()
         }
 
-        let generalItem = NSTabViewItem(viewController: generalViewController)
-        generalItem.label = "General"
-        generalItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "General")
+        tabController.addTabViewItem(
+            makeTabItem(label: "General", symbolName: "gearshape", accessibilityDescription: "General", viewController: generalViewController)
+        )
+        tabController.addTabViewItem(
+            makeTabItem(label: "Layouts", symbolName: "rectangle.split.3x1", accessibilityDescription: "Layouts", viewController: layoutsViewController)
+        )
+        tabController.addTabViewItem(
+            makeTabItem(label: "Displays", symbolName: "display", accessibilityDescription: "Displays", viewController: displaysViewController)
+        )
+        tabController.addTabViewItem(
+            makeTabItem(label: "Debug", symbolName: "waveform.path.ecg", accessibilityDescription: "Debug", viewController: debugViewController)
+        )
+        tabController.addTabViewItem(
+            makeTabItem(label: "About", symbolName: "info.circle", accessibilityDescription: "About", viewController: aboutViewController)
+        )
+    }
 
-        let layoutsItem = NSTabViewItem(viewController: layoutsViewController)
-        layoutsItem.label = "Layouts"
-        layoutsItem.image = NSImage(systemSymbolName: "rectangle.split.3x1", accessibilityDescription: "Layouts")
-
-        let displaysItem = NSTabViewItem(viewController: displaysViewController)
-        displaysItem.label = "Displays"
-        displaysItem.image = NSImage(systemSymbolName: "display", accessibilityDescription: "Displays")
-
-        let debugItem = NSTabViewItem(viewController: debugViewController)
-        debugItem.label = "Debug"
-        debugItem.image = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "Debug")
-
-        let aboutItem = NSTabViewItem(viewController: aboutViewController)
-        aboutItem.label = "About"
-        aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "About")
-
-        tabController.addTabViewItem(generalItem)
-        tabController.addTabViewItem(layoutsItem)
-        tabController.addTabViewItem(displaysItem)
-        tabController.addTabViewItem(debugItem)
-        tabController.addTabViewItem(aboutItem)
+    private func makeTabItem(
+        label: String,
+        symbolName: String,
+        accessibilityDescription: String,
+        viewController: NSViewController
+    ) -> NSTabViewItem {
+        let item = NSTabViewItem(viewController: viewController)
+        item.label = label
+        item.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
+        return item
     }
 
     private func wireEvents() {
@@ -130,6 +162,8 @@ private final class GeneralSettingsViewController: NSViewController {
     private let accessibilityLabel = NSTextField(labelWithString: "")
     private let accessibilityButton = NSButton(title: "", target: nil, action: nil)
 
+    // MARK: - Initialization
+
     init(initialSnapModifier: SnapModifier, onSnapModifierChanged: @escaping (SnapModifier) -> Void) {
         self.onSnapModifierChanged = onSnapModifierChanged
         super.init(nibName: nil, bundle: nil)
@@ -147,11 +181,15 @@ private final class GeneralSettingsViewController: NSViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    // MARK: - View Lifecycle
+
     override func loadView() {
         view = NSView()
         configureUI()
         refreshFromSystem()
     }
+
+    // MARK: - State
 
     func refreshFromSystem() {
         let available = LoginItemManager.shared.isFeatureAvailable
@@ -160,6 +198,8 @@ private final class GeneralSettingsViewController: NSViewController {
         startAtLoginCheckbox.toolTip = available ? nil : LoginItemManager.shared.unavailableReason
         updateAccessibilityStatus()
     }
+
+    // MARK: - Layout
 
     private func configureUI() {
         startAtLoginCheckbox.translatesAutoresizingMaskIntoConstraints = false
@@ -226,6 +266,8 @@ private final class GeneralSettingsViewController: NSViewController {
         ])
     }
 
+    // MARK: - Actions
+
     @objc
     private func toggleStartAtLogin() {
         do {
@@ -251,6 +293,8 @@ private final class GeneralSettingsViewController: NSViewController {
         }
     }
 
+    // macOS does not update the permission state synchronously when opening System Settings,
+    // so the settings screen re-checks the flag after a short delay.
     private func updateAccessibilityStatus() {
         let enabled = PermissionManager().ensureAccessibilityPermission(prompt: false)
         if enabled {
@@ -289,6 +333,8 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     private var mergeHandleCenterY: NSLayoutConstraint?
     private var activeLayoutIDForInteractiveResize: String?
 
+    // MARK: - Initialization
+
     init(store: DisplayLayoutStore) {
         self.store = store
         super.init(nibName: nil, bundle: nil)
@@ -299,14 +345,18 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         fatalError("init(coder:) has not been implemented")
     }
 
+    // MARK: - View Lifecycle
+
     override func loadView() {
         view = NSView()
         configureUI()
         reloadLayouts(selectLayoutID: nil)
     }
 
+    // MARK: - Data Loading
+
     func reloadLayouts(selectLayoutID: String?) {
-        layouts = orderedLayouts(store.allLayouts())
+        layouts = orderedSettingsLayouts(store.allLayouts())
         tableView.reloadData()
 
         if let selectLayoutID,
@@ -319,13 +369,7 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         updateEditorForSelection()
     }
 
-    private func orderedLayouts(_ source: [RegionLayout]) -> [RegionLayout] {
-        let builtInOrder = [RegionLayouts.split20x80.id, RegionLayouts.split80x20.id, RegionLayouts.threeColumn.id]
-        let builtIns = builtInOrder.compactMap { id in source.first(where: { $0.id == id }) }
-        let custom = source.filter { !builtInOrder.contains($0.id) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        return builtIns + custom
-    }
+    // MARK: - Layout
 
     private func configureUI() {
         let colName = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
@@ -447,7 +491,11 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         mergeHandleCenterY = centerY
     }
 
+    // MARK: - NSTableViewDataSource
+
     func numberOfRows(in tableView: NSTableView) -> Int { layouts.count }
+
+    // MARK: - NSTableViewDelegate
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard row < layouts.count else { return nil }
@@ -503,6 +551,8 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
 
     func tableViewSelectionDidChange(_ notification: Notification) { updateEditorForSelection() }
 
+    // MARK: - Actions
+
     @objc
     private func addLayout() {
         let layout = store.addFullscreenLayout(name: "")
@@ -551,6 +601,8 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         guard row >= 0, row < layouts.count else { return nil }
         return layouts[row]
     }
+
+    // MARK: - Preview Synchronization
 
     private func updateEditorForSelection() {
         guard let layout = selectedLayout else {
@@ -603,6 +655,8 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         )
     }
 
+    // Prevent view callbacks from bouncing back into the controller while it is already
+    // mutating preview selection or layout state in response to a previous callback.
     private func synchronizePreviewState(_ update: () -> Void) {
         isSynchronizingPreviewState = true
         defer { isSynchronizingPreviewState = false }
@@ -713,6 +767,8 @@ private final class LayoutPreviewView: NSView {
         let ratioSpan: ClosedRange<CGFloat>
     }
 
+    // MARK: - State
+
     var layout: RegionLayout? {
         didSet {
             if let layout {
@@ -749,6 +805,8 @@ private final class LayoutPreviewView: NSView {
     private var splitSourceDragPoint: NSPoint?
     private var pendingSplitDrop: (regionID: Int, axis: SplitAxis, ratio: CGFloat, lineRect: NSRect)?
 
+    // MARK: - Selection Helpers
+
     func selectedDividerPoint() -> CGPoint? {
         guard let layout, selectedRegionIDs.count == 2 else { return nil }
         guard let first = layout.regions.first(where: { $0.id == selectedRegionIDs[0] }),
@@ -784,6 +842,8 @@ private final class LayoutPreviewView: NSView {
             .first(where: { Set([$0.firstRegionID, $0.secondRegionID]) == Set(selectedRegionIDs) })?
             .axis
     }
+
+    // MARK: - Drawing
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -859,6 +919,8 @@ private final class LayoutPreviewView: NSView {
             NSBezierPath(roundedRect: pendingSplitDrop.lineRect.insetBy(dx: -2, dy: -2), xRadius: 4, yRadius: 4).fill()
         }
     }
+
+    // MARK: - Mouse Handling
 
     override func mouseDown(with event: NSEvent) {
         guard let layout else { return }
@@ -971,6 +1033,8 @@ private final class LayoutPreviewView: NSView {
         needsDisplay = true
     }
 
+    // MARK: - Geometry
+
     private func rect(for normalizedFrame: CGRect, in screenRect: NSRect) -> NSRect {
         NSRect(
             x: screenRect.minX + (screenRect.width * normalizedFrame.minX),
@@ -987,6 +1051,8 @@ private final class LayoutPreviewView: NSView {
     }
 
     private var splitSourceAxis: SplitAxis?
+
+    // MARK: - Split Handles
 
     private func parkedDividerRect(axis: SplitAxis, in canvas: NSRect) -> NSRect {
         switch axis {
@@ -1026,6 +1092,8 @@ private final class LayoutPreviewView: NSView {
         return nil
     }
 
+    // While dragging, compute the prospective divider inside the hovered region so the
+    // preview can show exactly where the split will land before the user releases.
     private func pendingSplitTarget(at point: NSPoint, in layout: RegionLayout, axis: SplitAxis) -> (regionID: Int, axis: SplitAxis, ratio: CGFloat, lineRect: NSRect)? {
         let screenRect = bounds.insetBy(dx: 16, dy: 22)
         for region in layout.regions {
@@ -1049,6 +1117,8 @@ private final class LayoutPreviewView: NSView {
         return nil
     }
 
+    // Divider hits are derived from adjacent normalized regions rather than cached paths so
+    // resizing, splitting, and merging always work from the current layout geometry.
     private func dividerHits(for layout: RegionLayout, in screenRect: NSRect) -> [DividerHit] {
         let epsilon: CGFloat = 0.001
         let touch: CGFloat = 8
@@ -1129,6 +1199,8 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
     private let tableView = NSTableView(frame: .zero)
     private let scrollView = NSScrollView(frame: .zero)
 
+    // MARK: - Initialization
+
     init(store: DisplayLayoutStore) {
         self.store = store
         super.init(nibName: nil, bundle: nil)
@@ -1139,16 +1211,20 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
         fatalError("init(coder:) has not been implemented")
     }
 
+    // MARK: - View Lifecycle
+
     override func loadView() {
         view = NSView()
         configureUI()
         reloadAll(selectDisplayID: nil)
     }
 
+    // MARK: - Data Loading
+
     func reloadAll(selectDisplayID: String?) {
         store.refreshConnectedDisplays()
         records = trimmedRecords(store.allRecords())
-        layouts = orderedLayouts(store.allLayouts())
+        layouts = orderedSettingsLayouts(store.allLayouts())
         tableView.reloadData()
 
         if let selectDisplayID,
@@ -1157,17 +1233,11 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
         }
     }
 
-    private func orderedLayouts(_ source: [RegionLayout]) -> [RegionLayout] {
-        let builtInOrder = [RegionLayouts.split20x80.id, RegionLayouts.split80x20.id, RegionLayouts.threeColumn.id]
-        let builtIns = builtInOrder.compactMap { id in source.first(where: { $0.id == id }) }
-        let custom = source.filter { !builtInOrder.contains($0.id) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        return builtIns + custom
-    }
-
     private func trimmedRecords(_ source: [DisplayRecord]) -> [DisplayRecord] {
         Array(source.prefix(maxDisplayedRows))
     }
+
+    // MARK: - Layout
 
     private func configureUI() {
         let colDisplay = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("display"))
@@ -1204,7 +1274,11 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
         ])
     }
 
+    // MARK: - NSTableViewDataSource
+
     func numberOfRows(in tableView: NSTableView) -> Int { records.count }
+
+    // MARK: - NSTableViewDelegate
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard row < records.count else { return nil }
@@ -1260,6 +1334,8 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
         }
     }
 
+    // MARK: - Actions
+
     @objc
     private func layoutSelectionChanged(_ sender: NSPopUpButton) {
         let row = sender.tag
@@ -1282,6 +1358,8 @@ private final class DebugSettingsViewController: NSViewController {
     private let infoLabel = NSTextField(wrappingLabelWithString: "Write snap diagnostics to the PanePilot log file.")
     private let openLogsButton = NSButton(title: "Open Logs Folder", target: nil, action: nil)
 
+    // MARK: - Initialization
+
     init(onDebugLoggingChanged: @escaping (Bool) -> Void) {
         self.onDebugLoggingChanged = onDebugLoggingChanged
         super.init(nibName: nil, bundle: nil)
@@ -1292,15 +1370,21 @@ private final class DebugSettingsViewController: NSViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    // MARK: - View Lifecycle
+
     override func loadView() {
         view = NSView()
         configureUI()
         refreshState()
     }
 
+    // MARK: - State
+
     func refreshState() {
         checkbox.state = DebugLogger.shared.isEnabled() ? .on : .off
     }
+
+    // MARK: - Layout
 
     private func configureUI() {
         checkbox.translatesAutoresizingMaskIntoConstraints = false
@@ -1333,6 +1417,8 @@ private final class DebugSettingsViewController: NSViewController {
         ])
     }
 
+    // MARK: - Actions
+
     @objc
     private func toggleLogging() {
         onDebugLoggingChanged(checkbox.state == .on)
@@ -1346,10 +1432,14 @@ private final class DebugSettingsViewController: NSViewController {
 
 @MainActor
 private final class AboutSettingsViewController: NSViewController {
+    // MARK: - View Lifecycle
+
     override func loadView() {
         view = NSView()
         configureUI()
     }
+
+    // MARK: - Layout
 
     private func configureUI() {
         let container = NSStackView()
@@ -1378,10 +1468,7 @@ private final class AboutSettingsViewController: NSViewController {
         let titleLabel = NSTextField(labelWithString: "PanePilot")
         titleLabel.font = NSFont.systemFont(ofSize: 21, weight: .semibold)
 
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-            ?? Bundle.main.infoDictionary?["CFBundleVersion"] as? String
-            ?? "dev"
-        let versionLabel = NSTextField(labelWithString: "Version \(version)")
+        let versionLabel = NSTextField(labelWithString: "Version \(applicationVersion)")
         versionLabel.textColor = .secondaryLabelColor
         versionLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
 
@@ -1430,9 +1517,18 @@ private final class AboutSettingsViewController: NSViewController {
             container.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
         ])
     }
+
+    private var applicationVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+            ?? Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+            ?? "dev"
+    }
 }
+
 private final class SettingsTabViewController: NSTabViewController {
     var onSelectionChanged: (() -> Void)?
+
+    // MARK: - NSTabViewController
 
     override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
         super.tabView(tabView, didSelect: tabViewItem)

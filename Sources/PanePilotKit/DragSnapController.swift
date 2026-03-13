@@ -46,6 +46,8 @@ final class DragSnapController {
         self.displayLayoutStore = displayLayoutStore
     }
 
+    // MARK: - Lifecycle
+
     func start() {
         logger.info("DragSnapController started. Log file: \(logger.logFileURL.path)")
         globalMonitor = NSEvent.addGlobalMonitorForEvents(
@@ -76,6 +78,8 @@ final class DragSnapController {
         }
     }
 
+    // MARK: - Configuration
+
     func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
         logger.info("Snapping \(enabled ? "enabled" : "disabled")")
@@ -104,16 +108,12 @@ final class DragSnapController {
         }
     }
 
+    // MARK: - Event Handling
+
     private func handle(event: NSEvent) {
         switch event.type {
         case .leftMouseDown:
-            let mousePoint = NSEvent.mouseLocation
-            mouseDownLocation = mousePoint
-            currentHighlightedRegionID = nil
-            currentSnapVariant = .full
-            overlayVisible = false
-            dragWindowConfirmed = false
-            initialWindowSnapshot = windowController.snapshotWindowForDrag(at: mousePoint)
+            beginTrackingDrag(at: NSEvent.mouseLocation)
         case .leftMouseDragged:
             handleDragged()
         case .leftMouseUp:
@@ -121,6 +121,15 @@ final class DragSnapController {
         default:
             break
         }
+    }
+
+    private func beginTrackingDrag(at point: CGPoint) {
+        mouseDownLocation = point
+        currentHighlightedRegionID = nil
+        currentSnapVariant = .full
+        overlayVisible = false
+        dragWindowConfirmed = false
+        initialWindowSnapshot = windowController.snapshotWindowForDrag(at: point)
     }
 
     private func handleDragged() {
@@ -144,7 +153,8 @@ final class DragSnapController {
         guard shouldConsiderWindow(currentSnapshot) else { return }
         guard isSameWindow(initialSnapshot, currentSnapshot) else { return }
 
-        // Only activate snapping overlay when the actual window has started moving.
+        // The user may click a title bar without dragging. Only show the overlay after
+        // the tracked window frame actually starts moving.
         let movedDistance = hypot(
             currentSnapshot.frame.origin.x - initialSnapshot.frame.origin.x,
             currentSnapshot.frame.origin.y - initialSnapshot.frame.origin.y
@@ -154,22 +164,7 @@ final class DragSnapController {
 
         guard let screen = screen(at: location) else { return }
         let layout = displayLayoutStore.layout(for: screen)
-        currentScreen = screen
-
-        let highlighted = region(at: location, on: screen, layout: layout)
-        let snapVariant = highlighted.map { snapVariantForPoint(location, region: $0, on: screen) } ?? RegionSnapVariant.full
-        if let highlighted, highlighted.id != currentHighlightedRegionID {
-            logger.info("Drag hover region=\(highlighted.id) layout=\(layout.id)")
-        }
-        currentHighlightedRegionID = highlighted?.id
-        currentSnapVariant = snapVariant
-        overlayController.show(
-            screen: screen,
-            layout: layout,
-            highlightedRegionID: highlighted?.id,
-            highlightedVariant: overlayVariant(for: snapVariant)
-        )
-        overlayVisible = true
+        updateOverlay(for: location, on: screen, layout: layout)
     }
 
     private func handleMouseUp() {
@@ -208,40 +203,11 @@ final class DragSnapController {
         }
         let snapVariant = snapVariantForPoint(location, region: region, on: screen)
 
-        let baseFrame = layoutEngine.frame(for: snapVisibleFrame(for: screen), region: region)
-        let targetFrame = targetFrame(for: baseFrame, variant: snapVariant)
         do {
-            var info = try windowController.moveWindow(snapshot, to: targetFrame)
-
-            let widthDelta = abs(info.finalFrame.width - info.requestedFrame.width)
-            let heightDelta = abs(info.finalFrame.height - info.requestedFrame.height)
-            if widthDelta > 1 || heightDelta > 1 {
-                let correctedOrigin = correctedOrigin(
-                    for: region,
-                    variant: snapVariant,
-                    requestedFrame: info.requestedFrame,
-                    actualSize: info.finalFrame.size
-                )
-                try windowController.setWindowPosition(snapshot, to: correctedOrigin)
-                info = try windowController.moveWindow(snapshot, to: CGRect(origin: correctedOrigin, size: info.finalFrame.size))
-                logger.warn(
-                    """
-                    Snap constrained by app min size: app=\(info.appName) bundle=\(info.bundleID) \
-                    requested=\(targetFrame.debugDescription) actual=\(info.finalFrame.debugDescription) \
-                    reappliedOrigin=\(correctedOrigin.debugDescription)
-                    """
-                )
-            }
-
-            logger.info(
-                """
-                Snap success: app=\(info.appName) bundle=\(info.bundleID) pid=\(info.pid) \
-                title=\"\(info.windowTitle)\" role=\(info.role)/\(info.subrole) \
-                minimized=\(info.minimized) settable(pos=\(info.positionSettable),size=\(info.sizeSettable)) \
-                layout=\(layout.id) region=\(region.id) variant=\(snapVariant.rawValue) requested=\(info.requestedFrame.debugDescription) final=\(info.finalFrame.debugDescription)
-                """
-            )
+            try applySnap(snapshot: snapshot, to: region, variant: snapVariant, on: screen, layout: layout)
         } catch {
+            let baseFrame = layoutEngine.frame(for: snapVisibleFrame(for: screen), region: region)
+            let targetFrame = targetFrame(for: baseFrame, variant: snapVariant)
             logger.error(
                 """
                 Snap failure: layout=\(layout.id) region=\(region.id) frame=\(targetFrame.debugDescription) \
@@ -250,6 +216,71 @@ final class DragSnapController {
             )
         }
     }
+
+    private func updateOverlay(for location: CGPoint, on screen: NSScreen, layout: RegionLayout) {
+        currentScreen = screen
+
+        let highlighted = region(at: location, on: screen, layout: layout)
+        let snapVariant = highlighted.map { snapVariantForPoint(location, region: $0, on: screen) } ?? .full
+        if let highlighted, highlighted.id != currentHighlightedRegionID {
+            logger.info("Drag hover region=\(highlighted.id) layout=\(layout.id)")
+        }
+
+        currentHighlightedRegionID = highlighted?.id
+        currentSnapVariant = snapVariant
+        overlayController.show(
+            screen: screen,
+            layout: layout,
+            highlightedRegionID: highlighted?.id,
+            highlightedVariant: overlayVariant(for: snapVariant)
+        )
+        overlayVisible = true
+    }
+
+    private func applySnap(
+        snapshot: FocusedWindowSnapshot,
+        to region: RegionLayout.Region,
+        variant: RegionSnapVariant,
+        on screen: NSScreen,
+        layout: RegionLayout
+    ) throws {
+        let baseFrame = layoutEngine.frame(for: snapVisibleFrame(for: screen), region: region)
+        let targetFrame = targetFrame(for: baseFrame, variant: variant)
+        var info = try windowController.moveWindow(snapshot, to: targetFrame)
+
+        let widthDelta = abs(info.finalFrame.width - info.requestedFrame.width)
+        let heightDelta = abs(info.finalFrame.height - info.requestedFrame.height)
+        if widthDelta > 1 || heightDelta > 1 {
+            // Some apps clamp the requested size. Re-anchor the window so oversized
+            // results still align to the chosen edge instead of drifting inward.
+            let correctedOrigin = correctedOrigin(
+                for: region,
+                variant: variant,
+                requestedFrame: info.requestedFrame,
+                actualSize: info.finalFrame.size
+            )
+            try windowController.setWindowPosition(snapshot, to: correctedOrigin)
+            info = try windowController.moveWindow(snapshot, to: CGRect(origin: correctedOrigin, size: info.finalFrame.size))
+            logger.warn(
+                """
+                Snap constrained by app min size: app=\(info.appName) bundle=\(info.bundleID) \
+                requested=\(targetFrame.debugDescription) actual=\(info.finalFrame.debugDescription) \
+                reappliedOrigin=\(correctedOrigin.debugDescription)
+                """
+            )
+        }
+
+        logger.info(
+            """
+            Snap success: app=\(info.appName) bundle=\(info.bundleID) pid=\(info.pid) \
+            title=\"\(info.windowTitle)\" role=\(info.role)/\(info.subrole) \
+            minimized=\(info.minimized) settable(pos=\(info.positionSettable),size=\(info.sizeSettable)) \
+            layout=\(layout.id) region=\(region.id) variant=\(variant.rawValue) requested=\(info.requestedFrame.debugDescription) final=\(info.finalFrame.debugDescription)
+            """
+        )
+    }
+
+    // MARK: - Overlay State
 
     private func resetOverlay() {
         overlayController.hide()
@@ -261,6 +292,8 @@ final class DragSnapController {
         initialWindowSnapshot = nil
         dragWindowConfirmed = false
     }
+
+    // MARK: - Window Matching
 
     private func screen(at point: CGPoint) -> NSScreen? {
         NSScreen.screens.first(where: { $0.frame.contains(point) })
@@ -305,6 +338,8 @@ final class DragSnapController {
 
         return true
     }
+
+    // MARK: - Geometry
 
     private func correctedOrigin(
         for region: RegionLayout.Region,
@@ -385,6 +420,7 @@ final class DragSnapController {
             ).integral
         }
     }
+
     private func overlayVariant(for variant: RegionSnapVariant) -> OverlayHighlightVariant {
         switch variant {
         case .full: .full

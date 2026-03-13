@@ -8,6 +8,8 @@ enum AppError: Error, LocalizedError {
     case focusedWindowUnavailable
     case axOperationFailed(String, AXError)
 
+    // MARK: - LocalizedError
+
     var errorDescription: String? {
         switch self {
         case .invalidArguments(let message):

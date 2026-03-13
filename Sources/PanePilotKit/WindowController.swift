@@ -1,6 +1,6 @@
+import AppKit
 import ApplicationServices
 import CoreGraphics
-import AppKit
 import Foundation
 
 struct WindowDebugInfo {
@@ -32,10 +32,13 @@ struct FocusedWindowSnapshot {
 }
 
 struct WindowController {
+    // Dragging can temporarily move focus away from the original window, so prefer the
+    // focused window snapshot first and only fall back to hit-testing under the cursor.
     func snapshotWindowForDrag(at point: CGPoint) -> FocusedWindowSnapshot? {
-        // Prefer focused window for stability, but fall back to hit-testing under cursor.
         snapshotFocusedWindow() ?? snapshotWindowUnderCursor(at: point)
     }
+
+    // MARK: - Snapshot Capture
 
     func snapshotFocusedWindow() -> FocusedWindowSnapshot? {
         guard let (appElement, windowElement) = focusedAppAndWindow() else {
@@ -44,25 +47,7 @@ struct WindowController {
 
         var pid: pid_t = 0
         AXUIElementGetPid(appElement, &pid)
-        let running = NSRunningApplication(processIdentifier: pid)
-
-        let position = pointAttribute(kAXPositionAttribute as String, from: windowElement)
-        let size = sizeAttribute(kAXSizeAttribute as String, from: windowElement)
-        let frame = appKitFrame(axOrigin: position, size: size)
-
-        return FocusedWindowSnapshot(
-            element: windowElement,
-            pid: pid,
-            appName: running?.localizedName ?? "unknown",
-            bundleID: running?.bundleIdentifier ?? "unknown",
-            windowTitle: stringAttribute(kAXTitleAttribute as String, from: windowElement),
-            role: stringAttribute(kAXRoleAttribute as String, from: windowElement),
-            subrole: stringAttribute(kAXSubroleAttribute as String, from: windowElement),
-            frame: frame,
-            positionSettable: isSettable(attribute: kAXPositionAttribute as String, on: windowElement),
-            sizeSettable: isSettable(attribute: kAXSizeAttribute as String, on: windowElement),
-            minimized: boolAttribute(kAXMinimizedAttribute as String, from: windowElement)
-        )
+        return snapshot(windowElement: windowElement, pid: pid)
     }
 
     func snapshotWindowUnderCursor(at point: CGPoint) -> FocusedWindowSnapshot? {
@@ -78,26 +63,10 @@ struct WindowController {
 
         var pid: pid_t = 0
         AXUIElementGetPid(windowElement, &pid)
-        let running = NSRunningApplication(processIdentifier: pid)
-
-        let position = pointAttribute(kAXPositionAttribute as String, from: windowElement)
-        let size = sizeAttribute(kAXSizeAttribute as String, from: windowElement)
-        let frame = appKitFrame(axOrigin: position, size: size)
-
-        return FocusedWindowSnapshot(
-            element: windowElement,
-            pid: pid,
-            appName: running?.localizedName ?? "unknown",
-            bundleID: running?.bundleIdentifier ?? "unknown",
-            windowTitle: stringAttribute(kAXTitleAttribute as String, from: windowElement),
-            role: stringAttribute(kAXRoleAttribute as String, from: windowElement),
-            subrole: stringAttribute(kAXSubroleAttribute as String, from: windowElement),
-            frame: frame,
-            positionSettable: isSettable(attribute: kAXPositionAttribute as String, on: windowElement),
-            sizeSettable: isSettable(attribute: kAXSizeAttribute as String, on: windowElement),
-            minimized: boolAttribute(kAXMinimizedAttribute as String, from: windowElement)
-        )
+        return snapshot(windowElement: windowElement, pid: pid)
     }
+
+    // MARK: - Window Movement
 
     func moveWindow(_ snapshot: FocusedWindowSnapshot, to frame: CGRect) throws -> WindowDebugInfo {
         try setPosition(windowElement: snapshot.element, frame: frame)
@@ -149,6 +118,8 @@ struct WindowController {
         try setPosition(windowElement: snapshot.element, frame: updated)
     }
 
+    // MARK: - AX Traversal
+
     private func ancestorWindow(from element: AXUIElement, maxDepth: Int = 8) -> AXUIElement? {
         var current: AXUIElement? = element
         var depth = 0
@@ -187,6 +158,8 @@ struct WindowController {
         return (appElement, windowElement)
     }
 
+    // MARK: - AX Writes
+
     private func setPosition(windowElement: AXUIElement, frame: CGRect) throws {
         var origin = axOrigin(forAppKitFrame: frame)
         guard let positionValue = AXValueCreate(.cgPoint, &origin) else {
@@ -207,6 +180,28 @@ struct WindowController {
         guard status == .success else {
             throw AppError.axOperationFailed("set size", status)
         }
+    }
+
+    // MARK: - AX Reads
+
+    private func snapshot(windowElement: AXUIElement, pid: pid_t) -> FocusedWindowSnapshot {
+        let running = NSRunningApplication(processIdentifier: pid)
+        let position = pointAttribute(kAXPositionAttribute as String, from: windowElement)
+        let size = sizeAttribute(kAXSizeAttribute as String, from: windowElement)
+
+        return FocusedWindowSnapshot(
+            element: windowElement,
+            pid: pid,
+            appName: running?.localizedName ?? "unknown",
+            bundleID: running?.bundleIdentifier ?? "unknown",
+            windowTitle: stringAttribute(kAXTitleAttribute as String, from: windowElement),
+            role: stringAttribute(kAXRoleAttribute as String, from: windowElement),
+            subrole: stringAttribute(kAXSubroleAttribute as String, from: windowElement),
+            frame: appKitFrame(axOrigin: position, size: size),
+            positionSettable: isSettable(attribute: kAXPositionAttribute as String, on: windowElement),
+            sizeSettable: isSettable(attribute: kAXSizeAttribute as String, on: windowElement),
+            minimized: boolAttribute(kAXMinimizedAttribute as String, from: windowElement)
+        )
     }
 
     private func inspect(appElement: AXUIElement, windowElement: AXUIElement) -> WindowDebugInfo {

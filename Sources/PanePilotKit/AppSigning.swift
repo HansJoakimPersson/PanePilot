@@ -2,6 +2,8 @@ import Foundation
 import Security
 
 enum AppSigning {
+    // Start-at-login only works for a real bundled app, so detect that early and surface
+    // a clear explanation in settings instead of letting ServiceManagement fail opaquely.
     static func isSignedBundleApp() -> Bool {
         let bundleURL = Bundle.main.bundleURL
         guard bundleURL.pathExtension.lowercased() == "app" else {

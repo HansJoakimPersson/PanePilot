@@ -12,6 +12,8 @@ final class OverlayWindowController {
     private var overlayWindow: NSWindow?
     private var overlayView: OverlayView?
 
+    // MARK: - Presentation
+
     func show(screen: NSScreen, layout: RegionLayout, highlightedRegionID: Int?, highlightedVariant: OverlayHighlightVariant) {
         let window: NSWindow
         let view: OverlayView
@@ -22,19 +24,9 @@ final class OverlayWindowController {
             view = existingView
         } else {
             view = OverlayView()
-            window = NSWindow(
-                contentRect: targetFrame,
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
-            )
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.hasShadow = false
-            window.level = .statusBar
-            window.ignoresMouseEvents = true
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            window.contentView = view
+            // Reuse one borderless overlay window across drags to avoid creating and
+            // destroying transient windows every time the pointer crosses a region.
+            window = makeOverlayWindow(frame: targetFrame, view: view)
 
             overlayWindow = window
             overlayView = view
@@ -50,6 +42,23 @@ final class OverlayWindowController {
     func hide() {
         overlayWindow?.orderOut(nil)
     }
+
+    private func makeOverlayWindow(frame: CGRect, view: OverlayView) -> NSWindow {
+        let window = NSWindow(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = false
+        window.level = .statusBar
+        window.ignoresMouseEvents = true
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.contentView = view
+        return window
+    }
 }
 
 final class OverlayView: NSView {
@@ -59,12 +68,16 @@ final class OverlayView: NSView {
 
     override var isOpaque: Bool { false }
 
+    // MARK: - State
+
     func update(layout: RegionLayout, highlightedRegionID: Int?, highlightedVariant: OverlayHighlightVariant) {
         self.layout = layout
         self.highlightedRegionID = highlightedRegionID
         self.highlightedVariant = highlightedVariant
         needsDisplay = true
     }
+
+    // MARK: - Drawing
 
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext, let layout else {
@@ -108,6 +121,8 @@ final class OverlayView: NSView {
         }
     }
 
+    // MARK: - Geometry
+
     private func denormalizedRect(_ normalized: CGRect, in container: CGRect) -> CGRect {
         CGRect(
             x: container.minX + (container.width * normalized.minX),
@@ -139,6 +154,8 @@ final class OverlayView: NSView {
             ).integral
         }
     }
+
+    // MARK: - Labels
 
     private func drawLabel(text: String, in rect: CGRect, highlighted: Bool) {
         let attributes: [NSAttributedString.Key: Any] = [

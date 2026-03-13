@@ -2,7 +2,11 @@ import AppKit
 import Foundation
 
 public enum AppIconProvider {
+    // MARK: - Public Images
+
     public static func applicationIconImage() -> NSImage {
+        // SwiftPM and ad-hoc builds do not always expose the bundled AppIcon asset,
+        // so fall back to an in-process generated icon when needed.
         if let named = NSImage(named: "AppIcon") {
             return named
         }
@@ -14,6 +18,7 @@ public enum AppIconProvider {
     }
 
     public static func iconImage(size: CGFloat) -> NSImage {
+        // The generated icon mirrors the three-pane layout metaphor used by the app.
         let image = NSImage(size: NSSize(width: size, height: size))
         image.lockFocus()
 
@@ -46,6 +51,7 @@ public enum AppIconProvider {
     }
 
     public static func menuBarImage() -> NSImage {
+        // Menu bar glyphs must stay simple and template-friendly to match the system tint.
         let size: CGFloat = 18
         let image = NSImage(size: NSSize(width: size, height: size))
         image.lockFocus()
