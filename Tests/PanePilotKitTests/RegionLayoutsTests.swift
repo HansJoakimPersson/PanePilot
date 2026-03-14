@@ -8,14 +8,10 @@ final class RegionLayoutsTests: XCTestCase {
         XCTAssertEqual(RegionLayouts.all.map(\.id), [
             "split-40-60",
             "split-60-40",
-            "wide",
-            "wide-mirror",
-            "column",
             "widescreen-tall",
             "widescreen-tall-mirror",
-            "three-column-left",
+            "column",
             "three-column-middle",
-            "three-column-right",
         ])
     }
 
@@ -23,8 +19,12 @@ final class RegionLayoutsTests: XCTestCase {
         XCTAssertEqual(RegionLayouts.find(by: "split-20-80")?.id, "split-40-60")
         XCTAssertEqual(RegionLayouts.find(by: "split-80-20")?.id, "split-60-40")
         XCTAssertEqual(RegionLayouts.find(by: "three-column")?.id, "column")
+        XCTAssertEqual(RegionLayouts.find(by: "three-column-left")?.id, "three-column-middle")
+        XCTAssertEqual(RegionLayouts.find(by: "three-column-right")?.id, "three-column-middle")
         XCTAssertEqual(RegionLayouts.find(by: "tall")?.id, "split-60-40")
         XCTAssertEqual(RegionLayouts.find(by: "tall-right")?.id, "split-40-60")
+        XCTAssertEqual(RegionLayouts.find(by: "wide")?.id, "split-60-40")
+        XCTAssertEqual(RegionLayouts.find(by: "wide-mirror")?.id, "split-40-60")
     }
 
     func testThreeEqualColumnsCoverEntireWidth() throws {

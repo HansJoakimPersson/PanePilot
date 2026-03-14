@@ -15,12 +15,6 @@ struct RegionLayout: Codable {
 }
 
 enum RegionLayouts {
-    private enum ThreeColumnMainPosition {
-        case left
-        case center
-        case right
-    }
-
     // MARK: - Built-In Layouts
 
     static let split40x60 = makeColumns(
@@ -37,20 +31,6 @@ enum RegionLayouts {
         regionNames: ["Left Pane", "Right Pane"]
     )
 
-    static let wide = makeWide(
-        id: "wide",
-        name: "Wide",
-        mainOnTop: true,
-        mainFraction: 0.5
-    )
-
-    static let wideMirror = makeWide(
-        id: "wide-mirror",
-        name: "Wide Mirror",
-        mainOnTop: false,
-        mainFraction: 0.5
-    )
-
     static let column = makeColumns(
         id: "column",
         name: "3 Equal Columns",
@@ -58,22 +38,11 @@ enum RegionLayouts {
         regionNames: ["Left Column", "Center Column", "Right Column"]
     )
 
-    static let threeColumnLeft = makeThreeColumn(
-        id: "three-column-left",
-        name: "3 Column Main Left",
-        mainPosition: .left
-    )
-
-    static let threeColumnMiddle = makeThreeColumn(
+    static let threeColumnMiddle = makeColumns(
         id: "three-column-middle",
         name: "3 Column Main Center",
-        mainPosition: .center
-    )
-
-    static let threeColumnRight = makeThreeColumn(
-        id: "three-column-right",
-        name: "3 Column Main Right",
-        mainPosition: .right
+        columnFractions: [0.25, 0.5, 0.25],
+        regionNames: ["Left Pane", "Main Pane", "Right Pane"]
     )
 
     static let widescreenTall = RegionLayout(
@@ -99,14 +68,10 @@ enum RegionLayouts {
     static let all: [RegionLayout] = [
         split40x60,
         split60x40,
-        wide,
-        wideMirror,
-        column,
         widescreenTall,
         widescreenTallMirror,
-        threeColumnLeft,
+        column,
         threeColumnMiddle,
-        threeColumnRight,
     ]
 
     // MARK: - Lookup
@@ -126,14 +91,20 @@ enum RegionLayouts {
             return split60x40.id
         case "three-column":
             return column.id
+        case "three-column-left", "three-column-right":
+            return threeColumnMiddle.id
         case "tall":
             return split60x40.id
         case "tall-right":
             return split40x60.id
         case "fullscreen":
             return split60x40.id
+        case "wide":
+            return split60x40.id
+        case "wide-mirror":
+            return split40x60.id
         case "row":
-            return wideMirror.id
+            return split40x60.id
         default:
             return id.lowercased()
         }
@@ -158,56 +129,6 @@ enum RegionLayouts {
         return RegionLayout(id: id, name: name, regions: regions)
     }
 
-    static func makeRows(id: String, name: String, rowFractions: [CGFloat], regionNames: [String]? = nil) -> RegionLayout {
-        let total = rowFractions.reduce(0, +)
-        let normalized = total > 0 ? rowFractions.map { $0 / total } : [1.0]
-
-        var y: CGFloat = 0
-        var regions: [RegionLayout.Region] = []
-        for (index, height) in normalized.enumerated() {
-            let region = RegionLayout.Region(
-                id: index + 1,
-                name: regionNames?[safe: index] ?? "Row \(index + 1)",
-                normalizedFrame: CGRect(x: 0, y: y, width: 1, height: height)
-            )
-            regions.append(region)
-            y += height
-        }
-
-        return RegionLayout(id: id, name: name, regions: regions)
-    }
-
-    private static func makeWide(id: String, name: String, mainOnTop: Bool, mainFraction: CGFloat) -> RegionLayout {
-        let fractions = mainOnTop ? [1 - mainFraction, mainFraction] : [mainFraction, 1 - mainFraction]
-        let names = mainOnTop ? ["Stack Pane", "Main Pane"] : ["Main Pane", "Stack Pane"]
-        return makeRows(id: id, name: name, rowFractions: fractions, regionNames: names)
-    }
-
-    private static func makeThreeColumn(id: String, name: String, mainPosition: ThreeColumnMainPosition) -> RegionLayout {
-        switch mainPosition {
-        case .left:
-            return makeColumns(
-                id: id,
-                name: name,
-                columnFractions: [0.5, 0.25, 0.25],
-                regionNames: ["Main Pane", "Secondary Pane", "Tertiary Pane"]
-            )
-        case .center:
-            return makeColumns(
-                id: id,
-                name: name,
-                columnFractions: [0.25, 0.5, 0.25],
-                regionNames: ["Left Pane", "Main Pane", "Right Pane"]
-            )
-        case .right:
-            return makeColumns(
-                id: id,
-                name: name,
-                columnFractions: [0.25, 0.25, 0.5],
-                regionNames: ["Tertiary Pane", "Secondary Pane", "Main Pane"]
-            )
-        }
-    }
 }
 
 private extension Array {
