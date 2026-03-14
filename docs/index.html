@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PanePilot</title>
+  <meta name="description" content="PanePilot is a macOS menu bar utility for snapping windows into practical layouts across your displays.">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">macOS window snapping from the menu bar</p>
+        <h1>PanePilot</h1>
+        <p class="lede">
+          Hold a modifier while dragging a window and PanePilot reveals layout regions for fast,
+          repeatable placement across your displays.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="https://github.com/HansJoakimPersson/PanePilot/releases/latest/download/PanePilot-latest-macOS.zip">Download latest release</a>
+          <a class="button button-secondary" href="https://github.com/HansJoakimPersson/PanePilot">View source on GitHub</a>
+        </div>
+      </div>
+      <div class="hero-card">
+        <div class="preview-frame">
+          <div class="preview-display">
+            <div class="preview-region region-main">60%</div>
+            <div class="preview-stack">
+              <div class="preview-region">Top</div>
+              <div class="preview-region">Bottom</div>
+            </div>
+          </div>
+        </div>
+        <ul class="meta-list">
+          <li><strong>Platform</strong><span>macOS 13+</span></li>
+          <li><strong>UI</strong><span>Menu bar utility</span></li>
+          <li><strong>Input</strong><span>Modifier + drag</span></li>
+          <li><strong>Source</strong><span>AGPL-3.0-only</span></li>
+        </ul>
+      </div>
+    </header>
+
+    <main>
+      <section class="grid-section">
+        <article class="content-card">
+          <h2>What PanePilot does</h2>
+          <p>
+            PanePilot gives you stable, repeatable snap zones without taking over the entire desktop.
+            You keep normal window movement until you hold the configured modifier, then the app reveals
+            available regions for the current display and snaps on drop.
+          </p>
+          <ul class="feature-list">
+            <li>Runs from the macOS menu bar</li>
+            <li>Per-display layout assignment</li>
+            <li>Built-in two-column, widescreen, and multi-column layouts</li>
+            <li>Top-half and bottom-half snaps inside a matching region</li>
+            <li>Start at Login support for signed app bundles</li>
+            <li>Debug logging for permission and window-move failures</li>
+          </ul>
+        </article>
+
+        <article class="content-card">
+          <h2>How it works</h2>
+          <ol class="steps-list">
+            <li>Download the latest release and move <code>PanePilot.app</code> to Applications.</li>
+            <li>Launch the app and grant Accessibility access in System Settings.</li>
+            <li>Open Settings to choose the snap modifier and review display layouts.</li>
+            <li>Hold the modifier while dragging a window.</li>
+            <li>Hover a region and release to snap.</li>
+          </ol>
+          <p class="subtle">
+            PanePilot uses macOS Accessibility APIs to inspect and move windows. Some apps enforce minimum
+            window sizes, so final geometry may be adjusted after the initial snap.
+          </p>
+        </article>
+      </section>
+
+      <section class="full-width-card">
+        <h2>Project status</h2>
+        <div class="status-grid">
+          <div>
+            <h3>Distribution</h3>
+            <p>Releases are published on GitHub. Public notarized distribution and the App Store path are not set up yet.</p>
+          </div>
+          <div>
+            <h3>Compatibility</h3>
+            <p>Current target: macOS 13 or newer.</p>
+          </div>
+          <div>
+            <h3>Support</h3>
+            <p>If you want to support PanePilot or future projects, you can do that through Buy Me a Coffee.</p>
+          </div>
+        </div>
+        <div class="link-row">
+          <a href="https://github.com/HansJoakimPersson/PanePilot/releases/latest">Latest release notes</a>
+          <a href="https://github.com/HansJoakimPersson/PanePilot/issues/new/choose">Report a bug or request a feature</a>
+          <a href="https://buymeacoffee.com/hansjoakimpersson">Support the project</a>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

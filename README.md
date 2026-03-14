@@ -18,16 +18,16 @@
 <br/>
 
 > [!IMPORTANT]
-> PanePilot is staying private for now while the core drag-and-snap workflow is being refined. The README is the main project overview; there is no public GitHub Pages site.
+> PanePilot is still evolving quickly. Releases are available from GitHub, and the project overview also lives on GitHub Pages.
 
 ## Download
 
 Download the latest release here:
 
 - [PanePilot-latest-macOS.zip](https://github.com/HansJoakimPersson/PanePilot/releases/latest/download/PanePilot-latest-macOS.zip)
+- [Project website](https://hansjoakimpersson.github.io/PanePilot/)
 
-You need access to this private repository to download it.
-Public notarized downloads are not available yet.
+Releases are published through GitHub. Public notarized downloads and an App Store submission path are not set up yet.
 
 ## Major features
 
@@ -38,6 +38,12 @@ Public notarized downloads are not available yet.
 - Supports top-half and bottom-half snaps inside a matching region.
 - Exposes Start at Login for signed app bundles.
 - Includes debug logging when you need to inspect permissions or window movement failures.
+
+## Website
+
+PanePilot also has a project site on GitHub Pages:
+
+- [hansjoakimpersson.github.io/PanePilot](https://hansjoakimpersson.github.io/PanePilot/)
 
 ## How to install and use the app
 
