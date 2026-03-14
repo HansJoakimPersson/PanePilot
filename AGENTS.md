@@ -30,6 +30,13 @@ When tradeoffs are unclear, prefer this order:
 4. keep hot paths efficient
 5. minimize architectural churn
 
+## Working Style
+
+- Be direct, neutral, and objective.
+- Challenge weak assumptions and explain tradeoffs.
+- Keep responses concise and practical.
+- Do not use emojis unless explicitly requested.
+
 ## Non-Negotiable Standards
 
 - Use only public Apple APIs.
@@ -178,6 +185,12 @@ Because PanePilot interacts with other apps through Accessibility APIs, changes 
 
 ## Testing and Verification
 
+General validation rules:
+
+- Run relevant checks/tests after edits when feasible.
+- If checks cannot run, state that clearly and why.
+- Call out risks or uncertainty explicitly.
+
 Minimum expectation after code changes:
 
 - run `swift build`
@@ -207,12 +220,16 @@ Before editing:
 1. understand the local architecture and affected files
 2. identify any hot-path, permission, sandbox, or packaging impact
 3. choose the smallest coherent change that solves the problem
+4. read the relevant files before proposing or making changes
 
 While editing:
 
 1. keep files structured
 2. extract helpers when they improve readability
 3. add concise comments only where they reduce cognitive load
+4. keep the change scoped to the requested task
+5. prefer simple solutions over over-engineering
+6. if command output is unexpected or empty, stop and verify before continuing
 
 After editing:
 
@@ -220,6 +237,32 @@ After editing:
 2. remove duplication introduced by refactor
 3. run the relevant verification commands
 4. summarize behavior impact, App Store/distribution impact, and verification results
+
+Before destructive or hard-to-reverse actions:
+
+- ask first unless the user has already explicitly approved that class of action
+
+## Git and PRs
+
+- Keep commit messages short and specific.
+- Never mention Claude Code in commit messages, PR descriptions, PR comments, or issue comments.
+- Never mention any LLM, tool, vendor, or model name in branch names.
+- Do not suggest or create branch names containing tool, vendor, or model branding.
+- Do not include a "Test plan" section in PR descriptions unless explicitly requested.
+
+Branch naming conventions for this repo:
+
+- Prefer plain version names for release/version branches, for example:
+  - `1.1.0`
+  - `1.0.x`
+- Prefer short descriptive names for task branches, for example:
+  - `settings-window`
+  - `layout-catalog-cleanup`
+- Do not use names such as:
+  - `codex/1.1.0`
+  - `claude/fixes`
+  - `gpt-release`
+  - any branch containing tool, vendor, or model branding
 
 ## File and Module Conventions
 
@@ -279,3 +322,8 @@ When platform behavior or review requirements are in doubt, prefer official Appl
 - Prefer the simpler implementation that a human can debug.
 - Prefer explicit tradeoff notes over silent assumptions.
 - Raise App Store risk early.
+
+## Skills
+
+- Use project/local skills when they clearly match the task.
+- Prefer skill workflows over ad-hoc manual steps when available.
