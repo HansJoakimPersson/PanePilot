@@ -1,17 +1,18 @@
 import AppKit
 import Foundation
 
+private let settingsWindowContentSize = NSSize(width: 450, height: 250)
+private let settingsVisibleTableRows = 7
+private let settingsTableRowHeight: CGFloat = 22
+private let settingsTableHeaderHeight: CGFloat = 26
+
 private let settingsBuiltInLayoutOrder = [
     RegionLayouts.split40x60.id,
     RegionLayouts.split60x40.id,
-    RegionLayouts.wide.id,
-    RegionLayouts.wideMirror.id,
-    RegionLayouts.column.id,
     RegionLayouts.widescreenTall.id,
     RegionLayouts.widescreenTallMirror.id,
-    RegionLayouts.threeColumnLeft.id,
+    RegionLayouts.column.id,
     RegionLayouts.threeColumnMiddle.id,
-    RegionLayouts.threeColumnRight.id,
 ]
 
 private func orderedSettingsLayouts(_ source: [RegionLayout]) -> [RegionLayout] {
@@ -50,7 +51,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         self.debugViewController = DebugSettingsViewController(onDebugLoggingChanged: onDebugLoggingChanged)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 450, height: 430),
+            contentRect: NSRect(origin: .zero, size: settingsWindowContentSize),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -62,8 +63,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         configureTabs()
         wireEvents()
 
+        tabController.preferredContentSize = settingsWindowContentSize
         window.contentViewController = tabController
         window.delegate = self
+        window.setContentSize(settingsWindowContentSize)
         window.center()
         updateWindowTitle()
     }
@@ -83,6 +86,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         showWindow(nil)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+        applyFixedContentSize(to: window)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -97,10 +101,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func configureWindow(_ window: NSWindow) {
         window.title = "General"
-        window.contentMinSize = NSSize(width: 450, height: 430)
-        window.contentMaxSize = NSSize(width: 450, height: 430)
+        window.contentMinSize = settingsWindowContentSize
+        window.contentMaxSize = settingsWindowContentSize
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace]
+        applyFixedContentSize(to: window)
     }
 
     private func refreshContent() {
@@ -114,6 +119,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         tabController.tabStyle = .toolbar
         tabController.onSelectionChanged = { [weak self] in
             self?.updateWindowTitle()
+            if let window = self?.window {
+                self?.applyFixedContentSize(to: window)
+            }
         }
 
         tabController.addTabViewItem(
@@ -155,6 +163,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private func updateWindowTitle() {
         window?.title = tabController.tabView.selectedTabViewItem?.label ?? "Settings"
     }
+
+    private func applyFixedContentSize(to window: NSWindow) {
+        window.setContentSize(settingsWindowContentSize)
+    }
 }
 
 @MainActor
@@ -194,6 +206,7 @@ private final class GeneralSettingsViewController: NSViewController {
         view = NSView()
         configureUI()
         refreshFromSystem()
+        preferredContentSize = settingsWindowContentSize
     }
 
     // MARK: - State
@@ -358,6 +371,7 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         view = NSView()
         configureUI()
         reloadLayouts(selectLayoutID: nil)
+        preferredContentSize = settingsWindowContentSize
     }
 
     // MARK: - Data Loading
@@ -381,16 +395,12 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     private func configureUI() {
         let colName = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         colName.title = "Layouts"
-        colName.width = 110
+        colName.width = 170
         tableView.addTableColumn(colName)
-
-        let colType = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("type"))
-        colType.title = "Type"
-        colType.width = 80
-        tableView.addTableColumn(colType)
         tableView.dataSource = self
         tableView.delegate = self
         tableView.usesAlternatingRowBackgroundColors = true
+        tableView.rowHeight = settingsTableRowHeight
         tableView.target = self
         tableView.doubleAction = #selector(handleTableDoubleClick)
 
@@ -462,7 +472,7 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
             scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             scrollView.widthAnchor.constraint(equalToConstant: 170),
-            scrollView.bottomAnchor.constraint(equalTo: addButton.topAnchor, constant: -10),
+            scrollView.heightAnchor.constraint(equalToConstant: compactTableHeight),
 
             addButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             addButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
@@ -498,6 +508,10 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         mergeHandleCenterY = centerY
     }
 
+    private var compactTableHeight: CGFloat {
+        settingsTableHeaderHeight + (CGFloat(settingsVisibleTableRows) * tableView.rowHeight)
+    }
+
     // MARK: - NSTableViewDataSource
 
     func numberOfRows(in tableView: NSTableView) -> Int { layouts.count }
@@ -507,27 +521,6 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard row < layouts.count else { return nil }
         let layout = layouts[row]
-        if tableColumn?.identifier.rawValue == "type" {
-            let cellID = NSUserInterfaceItemIdentifier("LayoutTypeCell")
-            let cell = tableView.makeView(withIdentifier: cellID, owner: self) as? NSTableCellView ?? {
-                let c = NSTableCellView()
-                c.identifier = cellID
-                let label = NSTextField(labelWithString: "")
-                label.translatesAutoresizingMaskIntoConstraints = false
-                label.textColor = .secondaryLabelColor
-                c.addSubview(label)
-                c.textField = label
-                NSLayoutConstraint.activate([
-                    label.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 6),
-                    label.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -6),
-                    label.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                ])
-                return c
-            }()
-            cell.textField?.stringValue = store.isLayoutEditable(id: layout.id) ? "Custom" : "Built-in"
-            return cell
-        }
-
         let cellID = NSUserInterfaceItemIdentifier("LayoutNameCell")
         let cell = tableView.makeView(withIdentifier: cellID, owner: self) as? NSTableCellView ?? {
             let c = NSTableCellView()
@@ -1201,7 +1194,6 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
     private let store: DisplayLayoutStore
     private var records: [DisplayRecord] = []
     private var layouts: [RegionLayout] = []
-    private let maxDisplayedRows = 4
 
     private let tableView = NSTableView(frame: .zero)
     private let scrollView = NSScrollView(frame: .zero)
@@ -1224,13 +1216,14 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
         view = NSView()
         configureUI()
         reloadAll(selectDisplayID: nil)
+        preferredContentSize = settingsWindowContentSize
     }
 
     // MARK: - Data Loading
 
     func reloadAll(selectDisplayID: String?) {
         store.refreshConnectedDisplays()
-        records = trimmedRecords(store.allRecords())
+        records = store.allRecords()
         layouts = orderedSettingsLayouts(store.allLayouts())
         tableView.reloadData()
 
@@ -1238,10 +1231,6 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
            let idx = records.firstIndex(where: { $0.displayID == selectDisplayID }) {
             tableView.selectRowIndexes(IndexSet(integer: idx), byExtendingSelection: false)
         }
-    }
-
-    private func trimmedRecords(_ source: [DisplayRecord]) -> [DisplayRecord] {
-        Array(source.prefix(maxDisplayedRows))
     }
 
     // MARK: - Layout
@@ -1265,7 +1254,7 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
         tableView.dataSource = self
         tableView.delegate = self
         tableView.usesAlternatingRowBackgroundColors = true
-        tableView.rowHeight = 22
+        tableView.rowHeight = settingsTableRowHeight
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
@@ -1277,8 +1266,13 @@ private final class DisplaysSettingsViewController: NSViewController, NSTableVie
             scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            scrollView.heightAnchor.constraint(equalToConstant: compactTableHeight),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
         ])
+    }
+
+    private var compactTableHeight: CGFloat {
+        settingsTableHeaderHeight + (CGFloat(settingsVisibleTableRows) * tableView.rowHeight)
     }
 
     // MARK: - NSTableViewDataSource
@@ -1383,6 +1377,7 @@ private final class DebugSettingsViewController: NSViewController {
         view = NSView()
         configureUI()
         refreshState()
+        preferredContentSize = settingsWindowContentSize
     }
 
     // MARK: - State
@@ -1444,6 +1439,7 @@ private final class AboutSettingsViewController: NSViewController {
     override func loadView() {
         view = NSView()
         configureUI()
+        preferredContentSize = settingsWindowContentSize
     }
 
     // MARK: - Layout
@@ -1535,10 +1531,21 @@ private final class AboutSettingsViewController: NSViewController {
 private final class SettingsTabViewController: NSTabViewController {
     var onSelectionChanged: (() -> Void)?
 
+    override var preferredContentSize: NSSize {
+        get { settingsWindowContentSize }
+        set { super.preferredContentSize = settingsWindowContentSize }
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        preferredContentSize = settingsWindowContentSize
+    }
+
     // MARK: - NSTabViewController
 
     override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
         super.tabView(tabView, didSelect: tabViewItem)
+        preferredContentSize = settingsWindowContentSize
         onSelectionChanged?()
     }
 }
