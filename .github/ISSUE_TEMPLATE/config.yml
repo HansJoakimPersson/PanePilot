@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: PanePilot website
+    url: https://hansjoakimpersson.github.io/PanePilot/
+    about: Read the project overview, feature summary, and install steps.
+  - name: Latest release
+    url: https://github.com/HansJoakimPersson/PanePilot/releases/latest
+    about: Download the latest release build and release notes.
+  - name: Support the project
+    url: https://buymeacoffee.com/hansjoakimpersson
+    about: Support PanePilot and future projects.

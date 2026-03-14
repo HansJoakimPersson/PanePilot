@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest a product improvement for PanePilot
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for concrete product improvements. Focus on the user problem first, then the proposed solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What workflow or pain point is missing today?
+      placeholder: I switch between an ultrawide monitor and a laptop display and need different modifier behavior per display.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you want.
+      placeholder: Add per-display snap modifier overrides in Settings.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What do you do today instead, or what alternatives did you consider?
+      placeholder: I currently switch the global modifier manually each time.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Include mockups, references, screenshots, or related tools if useful.
+
