@@ -424,6 +424,7 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
 
         previewView.translatesAutoresizingMaskIntoConstraints = false
         previewView.wantsLayer = true
+        previewView.layer?.backgroundColor = NSColor.clear.cgColor
         previewView.onSelectionChanged = { [weak self] _ in
             guard let self, !self.isSynchronizingPreviewState else { return }
             self.updateEditorForSelection()
@@ -849,8 +850,6 @@ private final class LayoutPreviewView: NSView {
         super.draw(dirtyRect)
 
         let canvas = bounds.insetBy(dx: 8, dy: 8)
-        NSColor.windowBackgroundColor.setFill()
-        NSBezierPath(rect: canvas).fill()
 
         let screenRect = canvas.insetBy(dx: 8, dy: 14)
         let path = NSBezierPath(roundedRect: screenRect, xRadius: 8, yRadius: 8)
