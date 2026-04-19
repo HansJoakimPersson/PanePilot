@@ -1,11 +1,16 @@
 import AppKit
 import Foundation
 
+// MARK: - Layout Constants
+
+/// Fixed content size for the Settings window. All tabs share the same dimensions so the
+/// window does not resize when the user switches tabs.
 private let settingsWindowContentSize = NSSize(width: 450, height: 250)
 private let settingsVisibleTableRows = 7
 private let settingsTableRowHeight: CGFloat = 22
 private let settingsTableHeaderHeight: CGFloat = 26
 
+/// Canonical display order for built-in layouts in the Layouts settings table.
 private let settingsBuiltInLayoutOrder = [
     RegionLayouts.split40x60.id,
     RegionLayouts.split60x40.id,
@@ -15,6 +20,8 @@ private let settingsBuiltInLayoutOrder = [
     RegionLayouts.threeColumnMiddle.id,
 ]
 
+/// Returns `source` sorted for display in the Layouts table: built-ins first in canonical
+/// order, then user layouts sorted alphabetically.
 private func orderedSettingsLayouts(_ source: [RegionLayout]) -> [RegionLayout] {
     let builtIns = settingsBuiltInLayoutOrder.compactMap { id in source.first(where: { $0.id == id }) }
     let custom = source
@@ -23,14 +30,23 @@ private func orderedSettingsLayouts(_ source: [RegionLayout]) -> [RegionLayout] 
     return builtIns + custom
 }
 
+/// AppKit window controller for the PanePilot Settings window.
+///
+/// The window hosts a tab bar with four tabs — General, Layouts, Debug, and About — each
+/// backed by a dedicated private view-controller class. The window has a fixed content size
+/// so tabs cannot cause resizing.
+///
+/// `SettingsWindowController` is created lazily by `SettingsWindowPresenter` and discarded
+/// when the window closes. The presenter's `onWindowClosed` callback lets the presenter nil
+/// out its reference and restore the `.accessory` activation policy.
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
+    /// Called when the Settings window closes. Used by `SettingsWindowPresenter` to clean up.
     var onWindowClosed: (() -> Void)?
 
     private let tabController = SettingsTabViewController()
     private let generalViewController: GeneralSettingsViewController
     private let layoutsViewController: LayoutsSettingsViewController
-    private let displaysViewController: DisplaysSettingsViewController
     private let debugViewController: DebugSettingsViewController
     private let aboutViewController = AboutSettingsViewController()
 
@@ -47,7 +63,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             onSnapModifierChanged: onSnapModifierChanged
         )
         self.layoutsViewController = LayoutsSettingsViewController(store: store)
-        self.displaysViewController = DisplaysSettingsViewController(store: store)
         self.debugViewController = DebugSettingsViewController(onDebugLoggingChanged: onDebugLoggingChanged)
 
         let window = NSWindow(
@@ -111,7 +126,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private func refreshContent() {
         generalViewController.refreshFromSystem()
         layoutsViewController.reloadLayouts(selectLayoutID: nil)
-        displaysViewController.reloadAll(selectDisplayID: nil)
         debugViewController.refreshState()
     }
 
@@ -129,9 +143,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         )
         tabController.addTabViewItem(
             makeTabItem(label: "Layouts", symbolName: "rectangle.split.3x1", accessibilityDescription: "Layouts", viewController: layoutsViewController)
-        )
-        tabController.addTabViewItem(
-            makeTabItem(label: "Displays", symbolName: "display", accessibilityDescription: "Displays", viewController: displaysViewController)
         )
         tabController.addTabViewItem(
             makeTabItem(label: "Debug", symbolName: "waveform.path.ecg", accessibilityDescription: "Debug", viewController: debugViewController)
@@ -155,7 +166,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func wireEvents() {
         layoutsViewController.onLayoutsChanged = { [weak self] selectedID in
-            self?.displaysViewController.reloadAll(selectDisplayID: nil)
             self?.layoutsViewController.reloadLayouts(selectLayoutID: selectedID)
         }
     }
@@ -542,9 +552,11 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
             return c
         }()
 
+        let editable = store.isLayoutEditable(id: layout.id)
         cell.textField?.stringValue = layout.name
-        cell.textField?.isEditable = store.isLayoutEditable(id: layout.id)
+        cell.textField?.isEditable = editable
         cell.textField?.isSelectable = true
+        cell.textField?.textColor = editable ? .labelColor : .secondaryLabelColor
         cell.textField?.delegate = self
         cell.textField?.tag = row
         return cell
@@ -1189,168 +1201,6 @@ private final class LayoutPreviewView: NSView {
 }
 
 @MainActor
-private final class DisplaysSettingsViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
-    private let store: DisplayLayoutStore
-    private var records: [DisplayRecord] = []
-    private var layouts: [RegionLayout] = []
-
-    private let tableView = NSTableView(frame: .zero)
-    private let scrollView = NSScrollView(frame: .zero)
-
-    // MARK: - Initialization
-
-    init(store: DisplayLayoutStore) {
-        self.store = store
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    // MARK: - View Lifecycle
-
-    override func loadView() {
-        view = NSView()
-        configureUI()
-        reloadAll(selectDisplayID: nil)
-        preferredContentSize = settingsWindowContentSize
-    }
-
-    // MARK: - Data Loading
-
-    func reloadAll(selectDisplayID: String?) {
-        store.refreshConnectedDisplays()
-        records = store.allRecords()
-        layouts = orderedSettingsLayouts(store.allLayouts())
-        tableView.reloadData()
-
-        if let selectDisplayID,
-           let idx = records.firstIndex(where: { $0.displayID == selectDisplayID }) {
-            tableView.selectRowIndexes(IndexSet(integer: idx), byExtendingSelection: false)
-        }
-    }
-
-    // MARK: - Layout
-
-    private func configureUI() {
-        let colDisplay = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("display"))
-        colDisplay.title = "Display"
-        colDisplay.width = 190
-        tableView.addTableColumn(colDisplay)
-
-        let colStatus = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("status"))
-        colStatus.title = "Status"
-        colStatus.width = 90
-        tableView.addTableColumn(colStatus)
-
-        let colLayout = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("layout"))
-        colLayout.title = "Layout"
-        colLayout.width = 150
-        tableView.addTableColumn(colLayout)
-
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.usesAlternatingRowBackgroundColors = true
-        tableView.rowHeight = settingsTableRowHeight
-
-        scrollView.documentView = tableView
-        scrollView.hasVerticalScroller = true
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-
-        view.addSubview(scrollView)
-
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            scrollView.heightAnchor.constraint(equalToConstant: compactTableHeight),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
-        ])
-    }
-
-    private var compactTableHeight: CGFloat {
-        settingsTableHeaderHeight + (CGFloat(settingsVisibleTableRows) * tableView.rowHeight)
-    }
-
-    // MARK: - NSTableViewDataSource
-
-    func numberOfRows(in tableView: NSTableView) -> Int { records.count }
-
-    // MARK: - NSTableViewDelegate
-
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard row < records.count else { return nil }
-        let record = records[row]
-
-        switch tableColumn?.identifier.rawValue {
-        case "layout":
-            let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-            popup.addItems(withTitles: layouts.map(\.name))
-            if let idx = layouts.firstIndex(where: { $0.id == record.layoutID }) {
-                popup.selectItem(at: idx)
-            }
-            popup.tag = row
-            popup.target = self
-            popup.action = #selector(layoutSelectionChanged(_:))
-
-            let wrapper = NSTableCellView()
-            popup.translatesAutoresizingMaskIntoConstraints = false
-            wrapper.addSubview(popup)
-            NSLayoutConstraint.activate([
-                popup.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 4),
-                popup.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -4),
-                popup.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 2),
-                popup.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -2),
-            ])
-            return wrapper
-
-        case "display", "status":
-            let text: String = tableColumn?.identifier.rawValue == "display"
-                ? record.name
-                : (record.isConnected ? "Connected" : "Offline")
-
-            let cellID = NSUserInterfaceItemIdentifier("DisplayTextCell")
-            let cell = tableView.makeView(withIdentifier: cellID, owner: self) as? NSTableCellView ?? {
-                let c = NSTableCellView()
-                c.identifier = cellID
-                let label = NSTextField(labelWithString: "")
-                label.translatesAutoresizingMaskIntoConstraints = false
-                c.addSubview(label)
-                c.textField = label
-                NSLayoutConstraint.activate([
-                    label.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 6),
-                    label.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -6),
-                    label.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                ])
-                return c
-            }()
-            cell.textField?.stringValue = text
-            return cell
-
-        default:
-            return nil
-        }
-    }
-
-    // MARK: - Actions
-
-    @objc
-    private func layoutSelectionChanged(_ sender: NSPopUpButton) {
-        let row = sender.tag
-        guard row >= 0, row < records.count else { return }
-        let selected = sender.indexOfSelectedItem
-        guard selected >= 0, selected < layouts.count else { return }
-
-        let record = records[row]
-        let layout = layouts[selected]
-        store.setLayout(layout.id, forDisplayID: record.displayID)
-        reloadAll(selectDisplayID: record.displayID)
-    }
-}
-
-@MainActor
 private final class DebugSettingsViewController: NSViewController {
     private let onDebugLoggingChanged: (Bool) -> Void
 
@@ -1521,9 +1371,14 @@ private final class AboutSettingsViewController: NSViewController {
     }
 
     private var applicationVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        let base = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
             ?? Bundle.main.infoDictionary?["CFBundleVersion"] as? String
             ?? "dev"
+        #if DEBUG
+        return "\(base) (dev)"
+        #else
+        return base
+        #endif
     }
 }
 
