@@ -1,329 +1,291 @@
-# PanePilot Agent Guide
+# AGENTS.md - macOS Swift App v1.0
 
-This file defines how an LLM agent should work in this repository.
+Guidance for agents working in macOS applications written in Swift. Apply the whole guide with judgment: some sections
+only matter when the project has that surface, but the standards are part of the main document rather than separate
+profiles.
 
-It is intentionally opinionated. PanePilot is a macOS utility app with distribution goals that are stricter than "it builds on my machine". Every change should be evaluated for:
+## How To Use This Guide
 
-1. product correctness
-2. human readability and maintainability
-3. runtime efficiency on hot paths
-4. Mac App Store viability
-5. release and packaging correctness
+- Read the whole file once when starting work in a macOS Swift project.
+- Apply SwiftPM rules when the project has `Package.swift`.
+- Apply Xcode rules when the project has an `.xcodeproj` or `.xcworkspace`.
+- Apply SwiftUI/AppKit rules according to the UI technology already in use.
+- Apply persistence, permissions, distribution, packaging, and dependency rules whenever the change touches those
+  surfaces.
+- Local project-specific instructions, `CLAUDE.md`, `ARCHITECTURE.md`, and local `AGENTS.md` files always take
+  precedence when present.
 
-## Project Summary
+## Core Rules
 
-- PanePilot is a macOS 13+ menu bar utility for snapping windows into layouts.
-- The app relies on macOS Accessibility APIs to inspect and move windows.
-- The repo uses Swift Package Manager, a `Makefile`, and an Xcode project.
-- The committed Xcode project is `PanePilot.xcodeproj`.
-- `Sources/PanePilotKit` contains the app logic, AppKit settings UI, layout logic, permissions, packaging helpers, and platform integration.
-- `Sources/PanePilot` contains the executable entry point and `MenuBarExtra`.
-- `Tests/PanePilotKitTests` contains logic tests.
+### Operating Principles
 
-## Core Priorities
+- Keep changes minimal and localized.
+- Preserve established public APIs, user-visible workflows, bundle behavior, permissions, and distribution assumptions
+  unless the task explicitly changes them.
+- Treat product correctness, user safety, privacy, and distribution viability as first-class constraints.
+- Prefer public Apple APIs and platform conventions.
+- Do not introduce dependencies, background behavior, privileged helpers, login items, external services, telemetry, or
+  alternate update mechanisms without explicit approval.
+- Keep the build green. Do not proceed if tests fail.
+- Call out App Store, privacy, permission, sandbox, signing, or packaging risk whenever a change touches those areas.
 
-When tradeoffs are unclear, prefer this order:
+### Workflow
 
-1. preserve correct snap behavior and permission handling
-2. preserve App Store and signed-distribution viability
-3. make the code easier for a human to read and debug
-4. keep hot paths efficient
-5. minimize architectural churn
+1. Read local project instructions before starting any task. If `CLAUDE.md`, `AGENTS.md`, or `ARCHITECTURE.md` exists,
+   read it.
+2. Read relevant source, build settings, package files, entitlements, and resources before proposing changes.
+3. Identify the affected surface: domain logic, UI, persistence, permissions, sandboxing, signing, packaging,
+   distribution, hot paths, or external integration.
+4. Use TDD for non-trivial logic: write or update the failing test first, implement the smallest change, then refactor
+   while keeping tests green.
+5. Update all build-system references when files, resources, targets, bundles, or schemes change.
+6. Run relevant SwiftPM and Xcode verification when feasible.
+7. Report changed files, commands run, test results, behavior impact, distribution impact, and any residual risks.
 
-## Working Style
+### Swift Style
 
-- Be direct, neutral, and objective.
-- Challenge weak assumptions and explain tradeoffs.
-- Keep responses concise and practical.
-- Do not use emojis unless explicitly requested.
-
-## Non-Negotiable Standards
-
-- Use only public Apple APIs.
-- Do not introduce third-party dependencies without explicit approval.
-- Do not add hidden background behavior, login items, helpers, or privilege escalation casually.
-- Do not trade readability for cleverness.
-- Do not assume a change is Mac App Store safe just because it works locally.
-- Do not weaken privacy messaging, permission messaging, or bundle metadata accuracy.
-
-## Platform Facts
-
-- Minimum platform: `macOS 13`
-- SwiftPM tools version: `6.1`
-- Xcode Swift language mode: `Swift 6`
-- Main executable target: `PanePilot`
-- Main library target: `PanePilotKit`
-- Xcode project: `PanePilot.xcodeproj`
-- Packaging path: `Makefile`
-- App bundle path after packaging: `.build/PanePilot.app`
-- Release archive path: `dist/PanePilot-<version>-macOS.zip`
-
-## Architecture Rules
-
-- Treat `PanePilotKit` as the main home for application logic.
-- Keep the executable target thin. It should primarily host app startup and the menu bar scene.
-- Keep the current folder layout as the source layout for both SwiftPM and Xcode.
-- AppKit is the primary UI framework in this repo. SwiftUI currently exists at the app entry/menu bar boundary.
-- Do not force a pure SwiftUI architecture onto AppKit-heavy code unless the user explicitly asks for that refactor.
-- Keep geometry, layout math, persistence, platform access, and UI orchestration separated by responsibility.
-- Avoid pushing non-UI logic into view/controller classes when a helper type would make ownership clearer.
-
-## SwiftPM vs Xcode
-
-Both build systems matter in this repo, but they do not have the same job.
-
-- SwiftPM is the preferred source of truth for:
-  - source layout
-  - module boundaries
-  - CI-friendly builds and tests
-  - lightweight local verification
-- Xcode is the preferred source of truth for:
-  - app target composition
-  - framework embedding
-  - entitlements
-  - signing
-  - sandbox configuration
-  - archive/export work
-
-When changing the project:
-
-- Do not let SwiftPM and Xcode drift silently.
-- Keep the distinction between SwiftPM tools version and Xcode Swift language mode explicit in docs and settings.
-- If you add, move, or rename sources/resources, update both `Package.swift` and `PanePilot.xcodeproj` when needed.
-- If a change is packaging-only or signing-only, prefer keeping that detail in Xcode rather than polluting SwiftPM.
-- If a change is module-structure or source-layout related, prefer making SwiftPM correct first and then mirror it in Xcode.
-- Do not duplicate logic between the `Makefile` and Xcode without a good reason.
-- Call out when one build path has been verified but the other has not.
-
-## Code Quality Rules
-
-- Optimize for the next human reader.
-- Prefer descriptive names over abbreviations.
-- Prefer explicit control flow over dense one-liners when the explicit version is easier to debug.
+- Follow the project's formatter, Swift version, and Swift language mode first.
+- Use descriptive names and explicit control flow.
+- Prefer value types, immutable state, and constructor validation where they fit the model.
+- Use access control deliberately; keep implementation details `private` or `fileprivate` where practical.
 - Use early returns to keep nesting shallow.
-- Avoid force unwraps and `try!` unless failure is unrecoverable and clearly justified.
-- Keep one primary type per file unless small helper types are tightly coupled and private.
-- Use `// MARK:` sections in non-trivial files.
-- Split large functions when they have multiple responsibilities, repeated logic, or hidden invariants.
-- Remove dead code and duplicated branches introduced by refactors.
+- Avoid force unwraps, `try!`, and implicitly unwrapped optionals unless failure is truly unrecoverable and documented
+  by context.
+- Preserve thrown error context when wrapping or translating errors.
+- Keep one primary type per file unless private helper types are tightly coupled.
+- Use `// MARK:` in non-trivial files.
+- Add documentation comments for public or reused types with non-obvious contracts.
+- Document invariants, permissions, safety rules, and user-visible behavior changes.
+- Do not add comments that merely restate syntax.
 
-## Documentation Rules
+### Concurrency and Runtime Safety
 
-- Inline comments should explain why, constraints, invariants, review risks, or non-obvious math.
-- Do not add comments that merely paraphrase syntax.
-- Add documentation comments for reusable types/functions or code with non-obvious contracts.
-- Keep the repo readable without external tribal knowledge.
-- When you add a new subsystem, include a short comment or structure that makes its boundary obvious.
-- If user-visible behavior changes, update `README.md` when appropriate.
+- Keep UI updates on the main actor.
+- Do not block the main thread with file I/O, rendering, hashing, network calls, database work, or long computations.
+- Use cancellation-aware async work for long-running operations.
+- Make progress reporting possible for user-visible long-running tasks.
+- Avoid unstructured concurrency unless there is a clear ownership and cancellation story.
+- Keep shared mutable state isolated through actors, the main actor, locks, or other explicit synchronization.
+- Treat repeated UI updates, file scanning, rendering, hashing, database access, event tracking, interprocess calls, and
+  platform API queries as potential hot paths.
+- Avoid unnecessary allocations in tight loops.
+- Avoid repeated expensive API calls when data can be cached safely.
+- Prefer measured performance improvements over speculative micro-optimizations.
 
-## Efficiency Rules
+### Logging and Security
 
-Treat these as hot paths unless proven otherwise:
+- Use the project's logging framework; prefer structured or privacy-aware logging where available.
+- Never log secrets, credentials, tokens, personal data, full paths, filenames, window titles, bundle identifiers,
+  pasteboard content, or user activity unless the project explicitly treats that data as safe.
+- Redact or summarize sensitive values before logging.
+- Keep user-facing messages clean and actionable.
+- Do not expose stack traces or internal implementation details to end users.
 
-- drag tracking
-- snap target calculation
-- overlay updates
-- Accessibility queries and writes
-- any repeated view redraw/update path
+### Configuration
 
-For those paths:
+- Do not hardcode environment-specific paths, URLs, bundle identifiers, team IDs, signing identities, feature flags, or
+  secrets in source code.
+- Use the project's configuration mechanism: build settings, `.xcconfig`, plist files, command-line arguments,
+  environment values, or ignored local config.
+- Keep local defaults safe and convenient without accidentally becoming release defaults.
+- Validate critical configuration at startup or build time and fail fast with clear messages.
+- Keep secrets out of committed config files.
 
-- keep main-thread work tight
-- avoid unnecessary allocations in loops or drag handlers
-- avoid repeated AX lookups when the same data is already available
-- avoid redraw churn
-- prefer measured improvements over speculative micro-optimizations
+### Testing
 
-For SwiftUI code:
+- Prefer TDD for pure logic, policies, state transitions, parsing, persistence rules, file action safety, permissions
+  decisions, and bug fixes.
+- A practical TDD loop is: failing test, smallest implementation, green test, refactor.
+- Use Apple's XCTest framework for Swift unit tests and integration-style tests unless the project has an established
+  alternative.
+- Use XCUITest for UI tests that verify real user flows, windows, menus, dialogs, permissions messaging, onboarding, and
+  regression-prone interactions.
+- Unit test pure logic and policy code with XCTest.
+- Add integration tests for filesystem, persistence, rendering, platform adapters, or resource loading when practical.
+- Smoke test user-critical flows after UI, permission, or bundle changes.
+- Keep UI tests focused on user-visible behavior rather than implementation details.
+- Prefer testability through dependency injection and protocol boundaries over reflection or fragile UI timing.
+- Do not remove tests unless explicitly requested.
+- Do not skip failing tests without explicit approval.
+- If UI automation, permission prompts, signing, packaging, or App Store paths cannot be validated locally, say so
+  explicitly.
 
-- keep `body` computations cheap
-- keep data dependencies narrow
-- move expensive formatting/computation out of `body`
-- use previews where practical for pure SwiftUI views, but do not invent previews for AppKit-heavy code just to satisfy a style rule
+### Documentation and Hygiene
 
-## macOS App Store Rules
+- Update README, usage docs, release notes, privacy notes, or design notes when user-visible behavior, permissions, or
+  distribution behavior changes.
+- Keep generated files out of source control unless the project intentionally tracks them.
+- Do not reformat unrelated files.
+- Do not make drive-by refactors.
+- Do not leave commented-out code behind.
 
-Mac App Store requirements are a first-class design constraint in this repo.
+### Definition of Done
 
-- Any app-store-facing build must remain compatible with App Sandbox.
-- Use the minimum entitlements and permissions necessary for the feature.
-- Any new protected capability must be justified in code review/output summary.
-- Keep the app self-contained. Do not add custom installers, downloaded code, alternate update mechanisms, or external resources that materially change app functionality for the App Store build.
-- Do not add auto-launch or start-at-login behavior without explicit user consent.
-- Do not add root privileges, setuid behavior, or privileged helpers.
-- Avoid deprecated or optionally installed technologies.
-- Keep the app functional on the current shipping macOS.
-- If a feature may create App Review risk, call it out explicitly rather than assuming it is acceptable.
+- Behavior is implemented and scoped to the request.
+- The app or package builds through the relevant build path.
+- Relevant tests pass with no known regressions.
+- SwiftPM, Xcode, packaging, signing, permissions, and distribution checks have run when the change touches those
+  surfaces.
+- Public behavior, documentation, privacy messaging, and configuration are aligned.
+- No unrelated dependency churn, formatting churn, or refactoring is included.
+- Completion notes always include modified files.
+- Completion notes always include commands executed.
+- Completion notes always include test results.
+- Completion notes call out permission, privacy, entitlement, App Store, signing, packaging, and residual runtime risks
+  when relevant.
+- If tests or checks could not run locally, explain why and name the CI pipeline, scheme, destination, or command that
+  should run instead.
 
-Because PanePilot interacts with other apps through Accessibility APIs, changes touching any of the following require extra scrutiny:
+### Explicitly Forbidden
 
-- permissions
-- sandboxing
-- startup/login behavior
-- cross-app control
-- diagnostics/logging
-- bundle metadata
-- entitlements
+- Private Apple APIs.
+- Hidden background behavior, login items, helpers, privilege escalation, telemetry, or external network behavior
+  without explicit approval.
+- Automatic destructive file operations without explicit user intent.
+- Hardcoded secrets, signing credentials, team-specific private values, personal data, or production-only configuration.
+- Weakening privacy messaging, permission explanations, sandboxing, entitlements, or bundle metadata accuracy.
+- Skipping or suppressing failing tests without explicit approval.
 
-## Privacy and Permission Rules
+## SwiftPM
 
-- Request only the access the app genuinely needs.
-- Preserve a clear, honest explanation of why Accessibility access is needed.
-- Degrade gracefully when permission is missing.
-- Process data on-device whenever possible.
-- Be conservative with logging. Window titles, bundle identifiers, display names, and interaction traces may be user-sensitive.
-- If app data collection or third-party integrations change, call out the need to update App Store privacy metadata and privacy policy.
+Use these rules when the project has `Package.swift`.
 
-## Packaging and Distribution Rules
+### SwiftPM Commands
 
-- Treat `Makefile` as part of the product, not a side detail.
-- If a change affects bundle metadata, permissions, versioning, signing, resources, or launch behavior, verify the packaging step too.
-- Keep `Info.plist` contents aligned with code behavior.
-- If a new capability requires a usage description or entitlement, update packaging/signing paths accordingly.
-- Keep Mac App Store assumptions separate from direct-download/Developer ID assumptions.
-- Do not silently break one distribution path while improving the other.
+```bash
+swift build
+swift test
+swift package resolve
+```
 
-## Testing and Verification
+Run only commands that apply to the project.
 
-General validation rules:
+### Package Rules
 
-- Run relevant checks/tests after edits when feasible.
-- If checks cannot run, state that clearly and why.
-- Call out risks or uncertainty explicitly.
+- Keep `Package.swift` as the source of truth for package targets, module boundaries, dependencies, and resources.
+- Update `Package.swift` when adding, moving, renaming, or removing source files/resources if the package layout
+  requires it.
+- Keep libraries as plain Swift package products when practical.
+- Do not add dependencies unless the task requires them.
+- Prefer Apple frameworks, Foundation, and existing project utilities before adding packages.
+- Explain why each new package dependency is needed.
 
-Minimum expectation after code changes:
+## Xcode App
 
-- run `swift build`
+Use these rules when the project has an `.xcodeproj` or `.xcworkspace`.
 
-Also run `swift test` when:
+### Xcode Commands
 
-- logic changes
-- persistence changes
-- layout math changes
-- selection or preview behavior changes
-- public behavior changes
+Use project-specific schemes and destinations:
 
-Run packaging/smoke checks when relevant:
+```bash
+xcodebuild -scheme AppName -configuration Debug -destination 'platform=macOS' build
+xcodebuild -scheme AppName -configuration Debug -destination 'platform=macOS' test
+```
 
-- `make app`
-- `make package CONFIGURATION=release VERSION=<version> BUILD_NUMBER=<n>`
-- `make run`
-- `xcodebuild -project PanePilot.xcodeproj -scheme PanePilot -configuration Debug -destination 'platform=macOS' build`
-- `xcodebuild -project PanePilot.xcodeproj -scheme PanePilot -configuration Debug -destination 'platform=macOS' test`
+### Xcode Rules
 
-If a UI or bundle-level change cannot be fully validated in the current environment, state that clearly.
+- Keep Xcode project settings aligned with SwiftPM when both are present.
+- Use Xcode settings for app targets, bundle identifiers, resources, entitlements, signing, sandboxing, capabilities,
+  archives, and exports.
+- If files/resources are added, moved, renamed, or deleted, update the Xcode project references.
+- Do not rely on Xcode-only generated behavior unless CI and command-line builds also work.
+- Keep schemes, build settings, and signing changes minimal and intentional.
+- State clearly when only SwiftPM or only Xcode has been verified.
 
-## Preferred Change Workflow
+## SwiftUI
 
-Before editing:
+Use these rules when the app UI is primarily SwiftUI.
 
-1. understand the local architecture and affected files
-2. identify any hot-path, permission, sandbox, or packaging impact
-3. choose the smallest coherent change that solves the problem
-4. read the relevant files before proposing or making changes
+- Keep `body` computations cheap.
+- Move expensive formatting, filtering, file I/O, networking, database work, and rendering out of `body`.
+- Keep view state narrow and explicit.
+- Use view models or observable state only where they clarify ownership.
+- Keep domain logic out of views.
+- Add previews where practical for reusable pure SwiftUI views, but do not invent previews for platform-heavy views just
+  to satisfy a rule.
+- Preserve accessibility labels, keyboard navigation, focus behavior, dynamic type where relevant, and contrast.
 
-While editing:
+## AppKit
 
-1. keep files structured
-2. extract helpers when they improve readability
-3. add concise comments only where they reduce cognitive load
-4. keep the change scoped to the requested task
-5. prefer simple solutions over over-engineering
-6. if command output is unexpected or empty, stop and verify before continuing
+Use these rules when the app uses AppKit, mixed SwiftUI/AppKit, menu bar UI, tables, outline views, panels, or
+platform-specific controls.
 
-After editing:
+- Keep AppKit controllers and delegates thin relative to domain/application logic.
+- Use AppKit-backed views for heavy tables, outlines, text systems, menu bar behavior, inspectors, or platform-specific
+  controls when SwiftUI is a poor fit.
+- Keep main-thread work small during event tracking, drawing, layout, drag/drop, and accessibility interactions.
+- Preserve responder chain, menu command, focus, undo, keyboard shortcut, and accessibility behavior.
+- Do not force a pure SwiftUI rewrite onto AppKit-heavy code unless explicitly requested.
 
-1. re-read the changed files for clarity
-2. remove duplication introduced by refactor
-3. run the relevant verification commands
-4. summarize behavior impact, App Store/distribution impact, and verification results
+## Persistence
 
-Before destructive or hard-to-reverse actions:
+Use these rules when the app stores data using files, SQLite, Core Data, SwiftData, UserDefaults, keychain, caches, or
+bookmarks.
 
-- ask first unless the user has already explicitly approved that class of action
+- Follow the storage technology already chosen by the project.
+- Prefer simple file storage or SQLite for local-first apps when that fits the data model.
+- Use Core Data or SwiftData only when object graph management, migrations, predicates, or platform integration justify
+  it.
+- Use UserDefaults only for small preferences, not user documents or large state.
+- Use keychain for secrets and credentials.
+- Keep caches disposable and rebuildable.
+- Use security-scoped bookmarks for sandboxed file access when needed.
+- Test migrations, file format changes, and persistence compatibility.
+- Never silently delete or rewrite user data without explicit user intent and a recovery story.
 
-## Git and PRs
+## Permissions and Privacy
 
-- Keep commit messages short and specific.
-- Never mention Claude Code in commit messages, PR descriptions, PR comments, or issue comments.
-- Never mention any LLM, tool, vendor, or model name in branch names.
-- Do not suggest or create branch names containing tool, vendor, or model branding.
-- Do not include a "Test plan" section in PR descriptions unless explicitly requested.
+Use these rules when the app touches protected resources, user data, or platform capabilities.
 
-Branch naming conventions for this repo:
+- Request only the permissions the feature genuinely needs.
+- Preserve clear, honest user-facing explanations for permissions.
+- Degrade gracefully when permission is missing, denied, revoked, or partially available.
+- Process data on-device whenever practical.
+- Keep `Info.plist` usage descriptions aligned with actual behavior.
+- Update privacy documentation or metadata when data collection, protected capabilities, diagnostics, or third-party
+  integrations change.
+- Treat file paths, filenames, window titles, bundle identifiers, pasteboard content, screenshots, and interaction
+  traces as potentially sensitive.
+- Do not add Accessibility, automation, file access, notifications, login item, camera, microphone, contacts, or
+  calendar behavior casually.
 
-- Prefer plain version names for release/version branches, for example:
-  - `1.1.0`
-  - `1.0.x`
-- Prefer short descriptive names for task branches, for example:
-  - `settings-window`
-  - `layout-catalog-cleanup`
-- Do not use names such as:
-  - `codex/1.1.0`
-  - `claude/fixes`
-  - `gpt-release`
-  - any branch containing tool, vendor, or model branding
+## App Store and Distribution
 
-## File and Module Conventions
+Use these rules when App Store viability, signing, sandboxing, entitlements, or distribution can be affected.
 
-- `Sources/PanePilot/`
-  - app entry point only
-- `Sources/PanePilotKit/`
-  - application logic, UI controllers, system integration, utilities
-- `Tests/PanePilotKitTests/`
-  - unit tests for logic and behavior that can be exercised without UI automation
-- `PanePilot.xcodeproj/`
-  - Xcode app/framework/test target wiring
-  - signing, entitlements, embedding, archive/export behavior
-- `Config/`
-  - entitlements and export/signing related configuration files
+- Use the minimum entitlements necessary.
+- Keep App Sandbox compatibility intact for App Store-facing builds.
+- Keep `Info.plist`, entitlements, signing settings, privacy metadata, and code behavior aligned.
+- Do not add downloaded executable code, custom installers, alternate update mechanisms, root privileges, setuid
+  behavior, or privileged helpers without explicit approval.
+- Keep direct-download and App Store assumptions separate when both distribution paths exist.
+- Avoid deprecated or optionally installed technologies unless the project already depends on them.
+- Call out App Review risk explicitly instead of assuming a locally working feature is acceptable.
 
-Keep feature-specific helpers near their owner until reuse clearly justifies extraction.
+## Packaging and Runtime
 
-## Readability Checklist
+Use these rules when producing an `.app`, installer, zip, DMG, CLI helper, launch item, or release artifact.
 
-Before considering a file "done", check:
+- Prefer a clean `.app` bundle for GUI apps and plain binaries/helpers only when they are truly needed.
+- Keep dev-only tools, test fixtures, generated debug files, and local config out of runtime artifacts.
+- Verify resources are packaged correctly when adding files to app bundles or package resources.
+- Keep startup behavior deterministic and fail fast on invalid configuration.
+- If bundle metadata, entitlements, permissions, signing, resources, launch behavior, or versioning changes, verify
+  packaging.
+- Do not silently break one distribution path while improving another.
+- Document how to build and run the artifact when packaging behavior changes.
 
-- Can a human quickly tell what this type is responsible for?
-- Are the most important methods near the top?
-- Are `MARK` sections helping navigation?
-- Are names descriptive?
-- Are comments explaining intent rather than restating syntax?
-- Would a less context-loaded developer know where to make the next change?
+## Dependency Policy
 
-If not, the file is not done.
+Use these rules when adding, removing, or upgrading dependencies.
 
-## App Store Review Checklist
-
-Before considering a product-facing change "done", check:
-
-- Does it rely only on public Apple APIs?
-- Does it remain compatible with App Sandbox expectations?
-- Does it add any new permission, entitlement, or sensitive data access?
-- Does it require updated `Info.plist`, signing, or privacy metadata?
-- Does it introduce startup, login, background, installer, or updater behavior that could create review problems?
-- Does it need a clearer user-facing explanation or fallback path?
-
-If any answer is "maybe", surface that explicitly.
-
-## References for Platform Decisions
-
-When platform behavior or review requirements are in doubt, prefer official Apple documentation first:
-
-- App Review Guidelines
-- App Sandbox
-- Configuring the macOS App Sandbox
-- App privacy details / App Store Connect privacy metadata
-- Developer ID / notarization guidance for direct distribution
-
-## In Doubt
-
-- Prefer official Apple guidance over blogs.
-- Prefer the simpler implementation that a human can debug.
-- Prefer explicit tradeoff notes over silent assumptions.
-- Raise App Store risk early.
-
-## Skills
-
-- Use project/local skills when they clearly match the task.
-- Prefer skill workflows over ad-hoc manual steps when available.
+- Prefer Apple frameworks, Foundation, Swift standard library, and existing project utilities before adding
+  dependencies.
+- Avoid small one-off dependencies for trivial utilities.
+- Prefer actively maintained, widely used packages with compatible licenses.
+- Be cautious with packages that introduce network behavior, native binaries, code generation, background services, or
+  broad permissions.
+- Pin versions through the project's existing package-management mechanism.
+- Remove unused dependencies when discovered as part of the task.
+- Explain why each new dependency is needed.
