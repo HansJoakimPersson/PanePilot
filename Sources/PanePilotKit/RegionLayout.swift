@@ -1,19 +1,41 @@
 import CoreGraphics
 import Foundation
 
+/// A named window-management layout composed of one or more non-overlapping screen regions.
+///
+/// `RegionLayout` is the central model type. Each layout has a stable string `id`, a
+/// human-readable `name`, and an ordered array of `Region` values. It is `Codable` so
+/// user-created layouts can be persisted in `UserDefaults`.
+///
+/// All geometry is stored in normalised 0…1 coordinates relative to the screen's usable frame.
+/// `LayoutEngine` converts those fractions to pixel-aligned `CGRect` values at snap time.
 struct RegionLayout: Codable {
+    /// A single rectangular region within a layout.
     struct Region: Codable {
+        /// Stable numeric identifier; unique within its parent layout.
         let id: Int
+        /// Human-readable region label (e.g. "Left Pane", "Main Pane").
         let name: String
-        // Stored in normalized 0...1 display coordinates so layouts scale to any screen.
+        /// Position and size in normalised 0…1 screen coordinates.
+        ///
+        /// For example, a region occupying the left 60 % of the screen has
+        /// `normalizedFrame = CGRect(x: 0, y: 0, width: 0.6, height: 1)`.
         let normalizedFrame: CGRect
     }
 
+    /// Stable identifier used for persistence and canonical ID mapping.
     let id: String
+    /// Human-readable layout name displayed in the picker and settings.
     let name: String
+    /// Ordered list of regions. Order determines rendering z-order in the thumbnail.
     let regions: [Region]
 }
 
+/// Factory and catalogue for the built-in `RegionLayout` values.
+///
+/// `RegionLayouts` is a namespace enum that holds every layout shipped with PanePilot, plus
+/// helper methods used during layout construction and lookup. Custom user layouts are stored
+/// separately in `DisplayLayoutStore`; this type only concerns itself with the built-ins.
 enum RegionLayouts {
     // MARK: - Built-In Layouts
 
@@ -76,6 +98,10 @@ enum RegionLayouts {
 
     // MARK: - Lookup
 
+    /// Returns the built-in layout with the given ID, after applying legacy ID mapping.
+    ///
+    /// Pass any raw ID — including legacy aliases handled by `canonicalLayoutID(for:)` — and
+    /// this method resolves it to the current built-in, or returns `nil` if no match exists.
     static func find(by id: String) -> RegionLayout? {
         let normalizedID = canonicalLayoutID(for: id)
         return all.first { $0.id == normalizedID }
@@ -83,6 +109,10 @@ enum RegionLayouts {
 
     // MARK: - Factories
 
+    /// Maps legacy or alternate layout IDs to the canonical current ID.
+    ///
+    /// Earlier versions of PanePilot used different ID strings for the built-in layouts.
+    /// This mapping keeps saved preferences valid across updates without requiring a migration.
     static func canonicalLayoutID(for id: String) -> String {
         switch id.lowercased() {
         case "split-20-80":
@@ -110,6 +140,11 @@ enum RegionLayouts {
         }
     }
 
+    /// Builds a `RegionLayout` composed of full-height columns with the given fractional widths.
+    ///
+    /// `columnFractions` need not sum to 1 — they are normalised internally. For example,
+    /// `[1, 1, 1]` produces three equal columns and `[0.4, 0.6]` produces a 40/60 split.
+    /// `regionNames`, when provided, must have the same count as `columnFractions`.
     static func makeColumns(id: String, name: String, columnFractions: [CGFloat], regionNames: [String]? = nil) -> RegionLayout {
         let total = columnFractions.reduce(0, +)
         let normalized = total > 0 ? columnFractions.map { $0 / total } : [1.0]

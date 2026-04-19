@@ -1,9 +1,22 @@
 import AppKit
 import Foundation
 
+/// Programmatic image factory for all app icon surfaces.
+///
+/// PanePilot ships no `.xcassets` asset catalog — icons are generated at runtime using Core
+/// Graphics primitives. This avoids asset-catalog tooling requirements during SwiftPM and
+/// `make run` builds and ensures the icon is always available regardless of bundle structure.
+///
+/// All three entry points return `NSImage` instances ready to hand to AppKit or SwiftUI.
 public enum AppIconProvider {
     // MARK: - Public Images
 
+    /// Returns the best available full-size application icon.
+    ///
+    /// Resolution order:
+    /// 1. `NSImage(named: "AppIcon")` — picks up the asset if the bundle was built by Xcode.
+    /// 2. `AppIcon.icns` on disk — handles manually copied resource bundles.
+    /// 3. `iconImage(size: 256)` — programmatic fallback, always succeeds.
     public static func applicationIconImage() -> NSImage {
         // SwiftPM and ad-hoc builds do not always expose the bundled AppIcon asset,
         // so fall back to an in-process generated icon when needed.
@@ -17,6 +30,11 @@ public enum AppIconProvider {
         return iconImage(size: 256)
     }
 
+    /// Generates a square app icon at the given point size.
+    ///
+    /// The icon depicts three vertical panes on a blue gradient background — a visual metaphor
+    /// for the window-splitting concept at the core of PanePilot. All dimensions are expressed
+    /// as fractions of `size` so the result is crisp at any resolution.
     public static func iconImage(size: CGFloat) -> NSImage {
         // The generated icon mirrors the three-pane layout metaphor used by the app.
         let image = NSImage(size: NSSize(width: size, height: size))
@@ -50,6 +68,12 @@ public enum AppIconProvider {
         return image
     }
 
+    /// Generates the 18×18 pt menu bar glyph.
+    ///
+    /// Three vertically-aligned panes are drawn with `labelColor` and `isTemplate = true` so
+    /// macOS automatically inverts the image in Dark Mode and when the menu bar background is
+    /// dark. The glyph must stay simple — a template image is alpha-masked; colour fills are
+    /// ignored by the system compositor.
     public static func menuBarImage() -> NSImage {
         // Menu bar glyphs must stay simple and template-friendly to match the system tint.
         let size: CGFloat = 18
