@@ -9,6 +9,7 @@
 
 <div align="center">
 <a href="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/ci.yml"><img src="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+<a href="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/release.yml"><img src="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/release.yml/badge.svg" alt="Release"/></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg?style=flat" alt="license"/></a>
 <a href="https://github.com/HansJoakimPersson/PanePilot"><img src="https://img.shields.io/badge/platform-macOS-0A84FF.svg?style=flat" alt="platform"/></a>
 <a href="https://github.com/HansJoakimPersson/PanePilot"><img src="https://img.shields.io/badge/Swift-6%20toolchain-F05138.svg?style=flat&logo=swift&logoColor=white" alt="Swift 6 toolchain"/></a>
