@@ -3,6 +3,7 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
+/// Diagnostic snapshot of a window move operation, captured after the AX writes complete.
 struct WindowDebugInfo {
     let pid: pid_t
     let appName: String
@@ -13,11 +14,19 @@ struct WindowDebugInfo {
     let positionSettable: Bool
     let sizeSettable: Bool
     let minimized: Bool
+    /// The frame that was requested via the AX API.
     let requestedFrame: CGRect
+    /// The frame the window actually ended up at (apps may clamp size).
     let finalFrame: CGRect
 }
 
+/// An immutable snapshot of an AX window element's attributes, captured at a point in time.
+///
+/// Snapshots are taken at mouse-down and during the drag to identify the window being dragged
+/// and verify it is eligible for snapping. The `element` reference is retained so AX writes
+/// can target the same window at drop time.
 struct FocusedWindowSnapshot {
+    /// The AX element for the window — retained for position/size writes at drop time.
     let element: AXUIElement
     let pid: pid_t
     let appName: String
@@ -25,15 +34,26 @@ struct FocusedWindowSnapshot {
     let windowTitle: String
     let role: String
     let subrole: String
+    /// Window frame in AppKit (bottom-left origin, Y-up) coordinates.
     let frame: CGRect
     let positionSettable: Bool
     let sizeSettable: Bool
     let minimized: Bool
 }
 
+/// Reads and writes window geometry via the macOS Accessibility API.
+///
+/// `WindowController` is a stateless struct — all operations take explicit inputs and return
+/// results or throw `AppError`. It handles the coordinate system translation between AppKit
+/// (Y-up, bottom-left origin) and the AX API (Y-down, top-left origin), the `AXValue`
+/// boxing/unboxing required for `CGPoint` and `CGSize` attributes, and the tree traversal
+/// needed to find the window ancestor of any arbitrary AX element.
 struct WindowController {
-    // Dragging can temporarily move focus away from the original window, so prefer the
-    // focused window snapshot first and only fall back to hit-testing under the cursor.
+    /// Returns a snapshot of the window being dragged, preferring the currently focused window.
+    ///
+    /// Dragging can temporarily shift AX focus away from the target window, so the method
+    /// first tries `snapshotFocusedWindow()` and falls back to hit-testing the AX element
+    /// under the cursor if the focused window cannot be identified.
     func snapshotWindowForDrag(at point: CGPoint) -> FocusedWindowSnapshot? {
         snapshotFocusedWindow() ?? snapshotWindowUnderCursor(at: point)
     }
@@ -68,6 +88,12 @@ struct WindowController {
 
     // MARK: - Window Movement
 
+    /// Moves and resizes the window described by `snapshot` to the given `frame`.
+    ///
+    /// Position is set before size; some AX implementations handle the two separately.
+    /// Returns a `WindowDebugInfo` capturing the requested vs. final frame so the caller can
+    /// detect if the app clamped the size.
+    /// - Throws: `AppError.axOperationFailed` if either AX write fails.
     func moveWindow(_ snapshot: FocusedWindowSnapshot, to frame: CGRect) throws -> WindowDebugInfo {
         try setPosition(windowElement: snapshot.element, frame: frame)
         try setSize(windowElement: snapshot.element, frame: frame)
@@ -88,30 +114,6 @@ struct WindowController {
         )
     }
 
-    func moveFocusedWindow(to frame: CGRect) throws -> WindowDebugInfo {
-        guard let (appElement, windowElement) = focusedAppAndWindow() else {
-            throw AppError.focusedApplicationUnavailable
-        }
-
-        let debugInfo = inspect(appElement: appElement, windowElement: windowElement)
-        try setPosition(windowElement: windowElement, frame: frame)
-        try setSize(windowElement: windowElement, frame: frame)
-        let finalFrame = frameOfWindowElement(windowElement)
-        return WindowDebugInfo(
-            pid: debugInfo.pid,
-            appName: debugInfo.appName,
-            bundleID: debugInfo.bundleID,
-            windowTitle: debugInfo.windowTitle,
-            role: debugInfo.role,
-            subrole: debugInfo.subrole,
-            positionSettable: debugInfo.positionSettable,
-            sizeSettable: debugInfo.sizeSettable,
-            minimized: debugInfo.minimized,
-            requestedFrame: frame,
-            finalFrame: finalFrame
-        )
-    }
-
     func setWindowPosition(_ snapshot: FocusedWindowSnapshot, to origin: CGPoint) throws {
         var updated = snapshot.frame
         updated.origin = origin
@@ -120,6 +122,9 @@ struct WindowController {
 
     // MARK: - AX Traversal
 
+    /// Walks up the AX parent chain to find the nearest ancestor with role `AXWindow`.
+    ///
+    /// `maxDepth` limits traversal to avoid infinite loops on pathological AX hierarchies.
     private func ancestorWindow(from element: AXUIElement, maxDepth: Int = 8) -> AXUIElement? {
         var current: AXUIElement? = element
         var depth = 0
@@ -159,6 +164,9 @@ struct WindowController {
     }
 
     // MARK: - AX Writes
+    // Position and size are written as `AXValue`-boxed `CGPoint`/`CGSize` values.
+    // The AX coordinate system has its origin at the top-left of the primary display (Y-down);
+    // `axOrigin(forAppKitFrame:)` performs the conversion from AppKit's Y-up coordinates.
 
     private func setPosition(windowElement: AXUIElement, frame: CGRect) throws {
         var origin = axOrigin(forAppKitFrame: frame)
@@ -201,26 +209,6 @@ struct WindowController {
             positionSettable: isSettable(attribute: kAXPositionAttribute as String, on: windowElement),
             sizeSettable: isSettable(attribute: kAXSizeAttribute as String, on: windowElement),
             minimized: boolAttribute(kAXMinimizedAttribute as String, from: windowElement)
-        )
-    }
-
-    private func inspect(appElement: AXUIElement, windowElement: AXUIElement) -> WindowDebugInfo {
-        var pid: pid_t = 0
-        AXUIElementGetPid(appElement, &pid)
-        let running = NSRunningApplication(processIdentifier: pid)
-
-        return WindowDebugInfo(
-            pid: pid,
-            appName: running?.localizedName ?? "unknown",
-            bundleID: running?.bundleIdentifier ?? "unknown",
-            windowTitle: stringAttribute(kAXTitleAttribute as String, from: windowElement),
-            role: stringAttribute(kAXRoleAttribute as String, from: windowElement),
-            subrole: stringAttribute(kAXSubroleAttribute as String, from: windowElement),
-            positionSettable: isSettable(attribute: kAXPositionAttribute as String, on: windowElement),
-            sizeSettable: isSettable(attribute: kAXSizeAttribute as String, on: windowElement),
-            minimized: boolAttribute(kAXMinimizedAttribute as String, from: windowElement),
-            requestedFrame: .zero,
-            finalFrame: .zero
         )
     }
 

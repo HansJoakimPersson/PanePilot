@@ -1,66 +1,19 @@
 import CoreGraphics
 import Foundation
 
-enum SplitEdge: String {
-    case left
-    case right
-    case top
-    case bottom
-
-    init(from raw: String) throws {
-        guard let edge = SplitEdge(rawValue: raw.lowercased()) else {
-            throw AppError.invalidArguments("Invalid edge '\(raw)'. Use: left|right|top|bottom")
-        }
-        self = edge
-    }
-}
-
+/// Pure geometry calculations for window placement.
+///
+/// `LayoutEngine` is a stateless struct that converts normalised region frames into
+/// pixel-aligned `CGRect` values suitable for passing to the Accessibility API. All methods
+/// are deterministic given the same inputs and carry no side-effects.
 struct LayoutEngine {
-    // MARK: - Edge-Based Frames
-
-    func frame(for screen: CGRect, edge: SplitEdge, ratio: Double) -> CGRect {
-        // Ratios come from UI and automation inputs, so clamp once here instead of
-        // expecting each caller to sanitize the value the same way.
-        let clamped = min(max(ratio, 0.0), 1.0)
-        let width = screen.width
-        let height = screen.height
-
-        switch edge {
-        case .left:
-            return CGRect(
-                x: screen.minX,
-                y: screen.minY,
-                width: width * clamped,
-                height: height
-            ).integral
-        case .right:
-            let targetWidth = width * clamped
-            return CGRect(
-                x: screen.maxX - targetWidth,
-                y: screen.minY,
-                width: targetWidth,
-                height: height
-            ).integral
-        case .top:
-            let targetHeight = height * clamped
-            return CGRect(
-                x: screen.minX,
-                y: screen.maxY - targetHeight,
-                width: width,
-                height: targetHeight
-            ).integral
-        case .bottom:
-            return CGRect(
-                x: screen.minX,
-                y: screen.minY,
-                width: width,
-                height: height * clamped
-            ).integral
-        }
-    }
-
     // MARK: - Region-Based Frames
 
+    /// Returns the pixel-aligned frame for the given normalised region within `screen`.
+    ///
+    /// `region.normalizedFrame` is in 0…1 space relative to the screen's visible area.
+    /// Multiplying by the screen's width and height converts it to absolute coordinates, and
+    /// `.integral` snaps sub-pixel values to whole-pixel boundaries.
     func frame(for screen: CGRect, region: RegionLayout.Region) -> CGRect {
         // Region layouts store normalized coordinates in 0...1 space relative to the
         // visible display area, which keeps them portable across screen sizes.
