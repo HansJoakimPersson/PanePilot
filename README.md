@@ -17,9 +17,6 @@
 
 <br/>
 
-> [!IMPORTANT]
-> PanePilot is still evolving quickly. Releases are available from GitHub, and the project overview also lives on GitHub Pages.
-
 ## Download
 
 Download the latest release here:
@@ -38,12 +35,6 @@ Releases are published through GitHub. Public notarized downloads and an App Sto
 - Includes built-in `40 / 60`, `60 / 40`, mirrored widescreen layouts, and multi-column layouts inspired by Amethyst.
 - Exposes Start at Login for signed app bundles.
 - Includes debug logging when you need to inspect permissions or window movement failures.
-
-## Website
-
-PanePilot also has a project site on GitHub Pages:
-
-- [hansjoakimpersson.github.io/PanePilot](https://hansjoakimpersson.github.io/PanePilot/)
 
 ## How to install and use the app
 
