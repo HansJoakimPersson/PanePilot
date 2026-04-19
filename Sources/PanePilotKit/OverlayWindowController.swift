@@ -1,12 +1,15 @@
 import AppKit
 import Foundation
 
-enum OverlayHighlightVariant {
-    case full
-    case topHalf
-    case bottomHalf
-}
-
+/// Draws a full-screen, mouse-transparent preview overlay that highlights a single snap region.
+///
+/// `OverlayWindowController` manages a single borderless, opaque-clear `NSWindow` that covers
+/// the active screen at `.statusBar` window level. The window ignores mouse events so drags
+/// pass through it uninterrupted. The overlay is reused across drag events — only its content
+/// and frame are updated, avoiding repeated window creation/destruction.
+///
+/// During a snap drag, `DragSnapController` calls `show(screen:layout:highlightedRegionID:)`
+/// each time the hovered picker region changes, and `hide()` when the picker is dismissed.
 @MainActor
 final class OverlayWindowController {
     private var overlayWindow: NSWindow?
@@ -14,7 +17,12 @@ final class OverlayWindowController {
 
     // MARK: - Presentation
 
-    func show(screen: NSScreen, layout: RegionLayout, highlightedRegionID: Int?, highlightedVariant: OverlayHighlightVariant) {
+    /// Shows (or updates) the overlay on `screen`, highlighting a specific region.
+    ///
+    /// The window is created lazily on the first call and reused on subsequent calls.
+    /// If `highlightedRegionID` is `nil`, the overlay is shown with no highlighted region
+    /// (a near-invisible white tint over the whole screen).
+    func show(screen: NSScreen, layout: RegionLayout, highlightedRegionID: Int?) {
         let window: NSWindow
         let view: OverlayView
         let targetFrame = screen.visibleFrame.insetBy(dx: -3, dy: -3)
@@ -35,7 +43,7 @@ final class OverlayWindowController {
         if window.frame != targetFrame {
             window.setFrame(targetFrame, display: true)
         }
-        view.update(layout: layout, highlightedRegionID: highlightedRegionID, highlightedVariant: highlightedVariant)
+        view.update(layout: layout, highlightedRegionID: highlightedRegionID)
         window.orderFrontRegardless()
     }
 
@@ -61,19 +69,23 @@ final class OverlayWindowController {
     }
 }
 
+/// Custom view that draws the region highlight glow and zone number directly with CoreGraphics.
+///
+/// The view covers the full overlay window (which itself covers the screen). Only the
+/// highlighted region is rendered with a visible fill, stroke, and number — all other regions
+/// are skipped, keeping the overlay visually clean during the picker interaction.
 final class OverlayView: NSView {
     private var layout: RegionLayout?
     private var highlightedRegionID: Int?
-    private var highlightedVariant: OverlayHighlightVariant = .full
 
     override var isOpaque: Bool { false }
 
     // MARK: - State
 
-    func update(layout: RegionLayout, highlightedRegionID: Int?, highlightedVariant: OverlayHighlightVariant) {
+    /// Updates the overlay's highlighted region and triggers a redraw.
+    func update(layout: RegionLayout, highlightedRegionID: Int?) {
         self.layout = layout
         self.highlightedRegionID = highlightedRegionID
-        self.highlightedVariant = highlightedVariant
         needsDisplay = true
     }
 
@@ -90,34 +102,47 @@ final class OverlayView: NSView {
 
         for region in layout.regions {
             let rect = denormalizedRect(region.normalizedFrame, in: bounds)
-            let isHighlighted = (region.id == highlightedRegionID)
-            guard isHighlighted else { continue }
-            let highlightRect = highlightedRect(in: rect, variant: highlightedVariant)
-            let roundedRect = highlightRect.insetBy(dx: 4, dy: 4)
+            guard region.id == highlightedRegionID else { continue }
+
+            let roundedRect = rect.insetBy(dx: 4, dy: 4)
             let path = NSBezierPath(roundedRect: roundedRect, xRadius: 24, yRadius: 24)
 
-            let fillColor: NSColor = isHighlighted
-                ? NSColor.white.withAlphaComponent(0.16)
-                : NSColor.white.withAlphaComponent(0.08)
-            fillColor.setFill()
+            NSColor.white.withAlphaComponent(0.16).setFill()
             path.fill()
 
             context.saveGState()
             context.setShadow(
                 offset: CGSize(width: 0, height: -1),
-                blur: isHighlighted ? 10 : 6,
-                color: NSColor.black.withAlphaComponent(isHighlighted ? 0.35 : 0.2).cgColor
+                blur: 10,
+                color: NSColor.black.withAlphaComponent(0.35).cgColor
             )
-            NSColor.white.withAlphaComponent(isHighlighted ? 0.96 : 0.82).setStroke()
+            NSColor.white.withAlphaComponent(0.96).setStroke()
             path.lineWidth = 3
             path.stroke()
             context.restoreGState()
 
-            drawLabel(
-                text: "\(region.id)",
-                in: roundedRect,
-                highlighted: isHighlighted
+            // Draw the zone number centred in the highlighted region.
+            let label = "\(region.id)" as NSString
+            let fontSize = max(24, min(roundedRect.height / 3.5, roundedRect.width / 2.5, 72))
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .bold),
+                .foregroundColor: NSColor.white.withAlphaComponent(0.85),
+            ]
+            let textSize = label.size(withAttributes: attrs)
+            let textOrigin = CGPoint(
+                x: roundedRect.midX - textSize.width / 2,
+                y: roundedRect.midY - textSize.height / 2
             )
+
+            // Subtle shadow behind the number for legibility.
+            context.saveGState()
+            context.setShadow(
+                offset: CGSize(width: 0, height: -1),
+                blur: 4,
+                color: NSColor.black.withAlphaComponent(0.5).cgColor
+            )
+            label.draw(at: textOrigin, withAttributes: attrs)
+            context.restoreGState()
         }
     }
 
@@ -130,44 +155,5 @@ final class OverlayView: NSView {
             width: container.width * normalized.width,
             height: container.height * normalized.height
         ).integral
-    }
-
-    private func highlightedRect(in regionRect: CGRect, variant: OverlayHighlightVariant) -> CGRect {
-        switch variant {
-        case .full:
-            return regionRect
-        case .topHalf:
-            let halfHeight = floor(regionRect.height / 2.0)
-            return CGRect(
-                x: regionRect.minX,
-                y: regionRect.maxY - halfHeight,
-                width: regionRect.width,
-                height: halfHeight
-            ).integral
-        case .bottomHalf:
-            let halfHeight = floor(regionRect.height / 2.0)
-            return CGRect(
-                x: regionRect.minX,
-                y: regionRect.minY,
-                width: regionRect.width,
-                height: halfHeight
-            ).integral
-        }
-    }
-
-    // MARK: - Labels
-
-    private func drawLabel(text: String, in rect: CGRect, highlighted: Bool) {
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.boldSystemFont(ofSize: highlighted ? 42 : 32),
-            .foregroundColor: NSColor.white.withAlphaComponent(highlighted ? 0.95 : 0.75),
-        ]
-        let attributed = NSAttributedString(string: text, attributes: attributes)
-        let size = attributed.size()
-        let point = CGPoint(
-            x: rect.midX - (size.width / 2),
-            y: rect.midY - (size.height / 2)
-        )
-        attributed.draw(at: point)
     }
 }

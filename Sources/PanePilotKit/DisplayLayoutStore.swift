@@ -1,19 +1,42 @@
 import AppKit
 import Foundation
 
+/// The axis along which a region is split.
 enum SplitAxis {
     case vertical
     case horizontal
 }
 
+/// Persisted record that tracks which layout is assigned to a specific physical display.
+///
+/// Records are keyed by `displayID` (a string representation of `CGDirectDisplayID`). The
+/// `isConnected` flag reflects whether the display was present the last time
+/// `refreshConnectedDisplays()` ran. Records for disconnected displays are retained so the
+/// assignment is remembered when the display is reconnected.
 struct DisplayRecord: Codable {
+    /// String form of `CGDirectDisplayID` — stable for the lifetime of the display connection.
     let displayID: String
+    /// Human-readable display name from `NSScreen.localizedName`.
     var name: String
+    /// Whether the display is currently connected.
     var isConnected: Bool
+    /// The last time this display was seen as connected.
     var lastSeenAt: Date
+    /// The ID of the `RegionLayout` assigned to this display.
     var layoutID: String
 }
 
+/// The central store for layout definitions and per-display layout assignments.
+///
+/// `DisplayLayoutStore` maintains two parallel collections:
+/// - **Layout catalog**: the full set of available `RegionLayout` values (built-ins + custom).
+/// - **Display registry**: `DisplayRecord` entries mapping physical displays to layouts.
+///
+/// Both collections are persisted to JSON files under `~/Library/Application Support/PanePilot/`.
+/// On load, legacy layout IDs are migrated through `RegionLayouts.canonicalLayoutID(for:)`.
+///
+/// All mutation methods must be called on the main actor. Read-only query methods
+/// (`allLayouts()`, `layout(for:)`, etc.) may be called from any main-thread context.
 @MainActor
 final class DisplayLayoutStore {
     // Display assignments and layout definitions are persisted separately so connected
@@ -44,6 +67,11 @@ final class DisplayLayoutStore {
 
     // MARK: - Display Assignments
 
+    /// Syncs the display registry against the currently connected screens.
+    ///
+    /// Connected displays get their `isConnected` flag set to `true` and `lastSeenAt` updated.
+    /// Displays no longer in `NSScreen.screens` are marked `isConnected = false` but kept in
+    /// the registry so their layout assignment is remembered when they reconnect.
     func refreshConnectedDisplays() {
         let now = Date()
         var connectedIDs = Set<String>()
@@ -91,34 +119,34 @@ final class DisplayLayoutStore {
         }
     }
 
-    func setLayout(_ layoutID: String, forDisplayID displayID: String) {
-        guard var record = recordsByID[displayID] else { return }
-        guard layoutsByID[layoutID] != nil else { return }
-        record.layoutID = layoutID
-        recordsByID[displayID] = record
-        persist()
-    }
-
-    func layout(for screen: NSScreen) -> RegionLayout {
-        guard let id = ScreenProvider.displayID(for: screen) else {
-            return defaultLayout
-        }
-        let idString = "\(id)"
-        guard let record = recordsByID[idString],
-              let layout = layoutsByID[record.layoutID] else {
-            return defaultLayout
-        }
-        return layout
-    }
-
-    func layoutID(forDisplayID displayID: String) -> String {
-        recordsByID[displayID]?.layoutID ?? defaultLayoutID
-    }
-
     // MARK: - Layout Catalog
 
+    /// Returns all layouts (built-in + custom) sorted alphabetically by name.
     func allLayouts() -> [RegionLayout] {
         layoutsByID.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Returns all layouts in snap-picker display order.
+    ///
+    /// Built-in layouts appear first in a fixed canonical order (matching the Settings table),
+    /// followed by user-created layouts sorted alphabetically. This is the order used by
+    /// `SnapPickerWindowController` when rendering the thumbnail row.
+    func orderedLayouts() -> [RegionLayout] {
+        let builtInOrder = [
+            RegionLayouts.split60x40.id,
+            RegionLayouts.split40x60.id,
+            RegionLayouts.widescreenTall.id,
+            RegionLayouts.widescreenTallMirror.id,
+            RegionLayouts.column.id,
+            RegionLayouts.threeColumnMiddle.id,
+        ]
+        let all = layoutsByID
+        let builtIns = builtInOrder.compactMap { all[$0] }
+        let builtInIDs = Set(builtInOrder)
+        let custom = all.values
+            .filter { !builtInIDs.contains($0.id) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return builtIns + custom
     }
 
     func addColumnLayout(name: String, columns: Int) -> RegionLayout {
@@ -185,6 +213,9 @@ final class DisplayLayoutStore {
         return true
     }
 
+    /// Returns `true` if the layout with the given ID can be renamed, edited, or deleted.
+    ///
+    /// Built-in layouts are read-only; only user-created layouts are editable.
     func isLayoutEditable(id: String) -> Bool {
         !builtInLayoutIDs.contains(id)
     }

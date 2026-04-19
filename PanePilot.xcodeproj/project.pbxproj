@@ -23,6 +23,7 @@
 		000000000000000000000044 /* LayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000043 /* LayoutEngine.swift */; };
 		000000000000000000000046 /* LoginItemManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000045 /* LoginItemManager.swift */; };
 		000000000000000000000048 /* OverlayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000047 /* OverlayWindowController.swift */; };
+		00000000000000000000005C /* SnapPickerWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000005B /* SnapPickerWindowController.swift */; };
 		00000000000000000000004A /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000049 /* PermissionManager.swift */; };
 		00000000000000000000004C /* RegionLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000004B /* RegionLayout.swift */; };
 		00000000000000000000004E /* ScreenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000004D /* ScreenProvider.swift */; };
@@ -85,6 +86,7 @@
 		000000000000000000000043 /* LayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LayoutEngine.swift; path = Sources/PanePilotKit/LayoutEngine.swift; sourceTree = SOURCE_ROOT; };
 		000000000000000000000045 /* LoginItemManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoginItemManager.swift; path = Sources/PanePilotKit/LoginItemManager.swift; sourceTree = SOURCE_ROOT; };
 		000000000000000000000047 /* OverlayWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OverlayWindowController.swift; path = Sources/PanePilotKit/OverlayWindowController.swift; sourceTree = SOURCE_ROOT; };
+		00000000000000000000005B /* SnapPickerWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SnapPickerWindowController.swift; path = Sources/PanePilotKit/SnapPickerWindowController.swift; sourceTree = SOURCE_ROOT; };
 		000000000000000000000049 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PermissionManager.swift; path = Sources/PanePilotKit/PermissionManager.swift; sourceTree = SOURCE_ROOT; };
 		00000000000000000000004B /* RegionLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RegionLayout.swift; path = Sources/PanePilotKit/RegionLayout.swift; sourceTree = SOURCE_ROOT; };
 		00000000000000000000004D /* ScreenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScreenProvider.swift; path = Sources/PanePilotKit/ScreenProvider.swift; sourceTree = SOURCE_ROOT; };
@@ -178,6 +180,7 @@
 				000000000000000000000045 /* LoginItemManager.swift */,
 				000000000000000000000047 /* OverlayWindowController.swift */,
 				000000000000000000000049 /* PermissionManager.swift */,
+				00000000000000000000005B /* SnapPickerWindowController.swift */,
 				00000000000000000000004B /* RegionLayout.swift */,
 				00000000000000000000004D /* ScreenProvider.swift */,
 				00000000000000000000004F /* SettingsWindowController.swift */,
@@ -355,6 +358,7 @@
 				000000000000000000000044 /* LayoutEngine.swift in Sources */,
 				000000000000000000000046 /* LoginItemManager.swift in Sources */,
 				000000000000000000000048 /* OverlayWindowController.swift in Sources */,
+				00000000000000000000005C /* SnapPickerWindowController.swift in Sources */,
 				00000000000000000000004A /* PermissionManager.swift in Sources */,
 				00000000000000000000004C /* RegionLayout.swift in Sources */,
 				00000000000000000000004E /* ScreenProvider.swift in Sources */,
