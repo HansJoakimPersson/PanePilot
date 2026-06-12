@@ -38,3 +38,6 @@ DerivedData/
 .codex/
 .direnv/
 .envrc
+
+# Local Clarity Framework templates
+/docs/*.md

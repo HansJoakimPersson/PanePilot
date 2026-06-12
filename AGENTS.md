@@ -1,4 +1,4 @@
-# AGENTS.md - macOS Swift App v1.0
+# AGENTS.md - macOS Swift App v1.1
 
 Guidance for agents working in macOS applications written in Swift. Apply the whole guide with judgment: some sections
 only matter when the project has that surface, but the standards are part of the main document rather than separate
@@ -12,8 +12,7 @@ profiles.
 - Apply SwiftUI/AppKit rules according to the UI technology already in use.
 - Apply persistence, permissions, distribution, packaging, and dependency rules whenever the change touches those
   surfaces.
-- Local project-specific instructions, `CLAUDE.md`, `ARCHITECTURE.md`, and local `AGENTS.md` files always take
-  precedence when present.
+- Local project-specific instructions, `CLAUDE.md`, and local `AGENTS.md` files always take precedence when present.
 
 ## Core Rules
 
@@ -31,16 +30,22 @@ profiles.
 
 ### Workflow
 
-1. Read local project instructions before starting any task. If `CLAUDE.md`, `AGENTS.md`, or `ARCHITECTURE.md` exists,
-   read it.
-2. Read relevant source, build settings, package files, entitlements, and resources before proposing changes.
-3. Identify the affected surface: domain logic, UI, persistence, permissions, sandboxing, signing, packaging,
+1. Read local project instructions before starting any task. If `CLAUDE.md` or `AGENTS.md` exists, read it.
+2. In Clarity Framework projects, read project documentation in this order:
+   - `docs/00-ai-context.md` — compressed overview of what the app is, its stack, and current status
+   - `docs/09-grafisk-profil.md` — design tokens, colour palette, typography, and spacing; read before touching
+     any visual value. If this file does not exist, do not hardcode visual values — raise the gap instead.
+   - `docs/03-sad.md` — architecture, component responsibilities, and key design decisions
+   - `docs/02-kravdokumentation.md` — requirements context when the task touches functional behavior or product scope
+   - `docs/05-deployment-view.md` — distribution and packaging context when the task affects builds or releases
+3. Read relevant source, build settings, package files, entitlements, and resources before proposing changes.
+4. Identify the affected surface: domain logic, UI, persistence, permissions, sandboxing, signing, packaging,
    distribution, hot paths, or external integration.
-4. Use TDD for non-trivial logic: write or update the failing test first, implement the smallest change, then refactor
+5. Use TDD for non-trivial logic: write or update the failing test first, implement the smallest change, then refactor
    while keeping tests green.
-5. Update all build-system references when files, resources, targets, bundles, or schemes change.
-6. Run relevant SwiftPM and Xcode verification when feasible.
-7. Report changed files, commands run, test results, behavior impact, distribution impact, and any residual risks.
+6. Update all build-system references when files, resources, targets, bundles, or schemes change.
+7. Run relevant SwiftPM and Xcode verification when feasible.
+8. Report changed files, commands run, test results, behavior impact, distribution impact, and any residual risks.
 
 ### Swift Style
 
@@ -114,6 +119,12 @@ profiles.
 
 - Update README, usage docs, release notes, privacy notes, or design notes when user-visible behavior, permissions, or
   distribution behavior changes.
+- In Clarity Framework projects, update the relevant docs when their content changes:
+  - `docs/03-sad.md` — when architecture or key design decisions change
+  - `docs/05-deployment-view.md` — when distribution, packaging, signing, or App Store behavior changes
+  - `docs/06-testdokumentation.md` — when testing strategy or coverage targets change
+  - `docs/08-andringshantering.md` — for change tracking and ADRs
+  - `docs/00-ai-context.md` — when stack, status, or key context shifts significantly
 - Keep generated files out of source control unless the project intentionally tracks them.
 - Do not reformat unrelated files.
 - Do not make drive-by refactors.
@@ -127,6 +138,7 @@ profiles.
 - SwiftPM, Xcode, packaging, signing, permissions, and distribution checks have run when the change touches those
   surfaces.
 - Public behavior, documentation, privacy messaging, and configuration are aligned.
+- Relevant Clarity Framework docs are updated when their content is affected.
 - No unrelated dependency churn, formatting churn, or refactoring is included.
 - Completion notes always include modified files.
 - Completion notes always include commands executed.
