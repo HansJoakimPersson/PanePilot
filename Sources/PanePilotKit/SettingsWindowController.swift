@@ -5,7 +5,7 @@ import Foundation
 
 /// Fixed content size for the Settings window. All tabs share the same dimensions so the
 /// window does not resize when the user switches tabs.
-private let settingsWindowContentSize = NSSize(width: 450, height: 250)
+private let settingsWindowContentSize = NSSize(width: 450, height: 300)
 private let settingsVisibleTableRows = 7
 private let settingsTableRowHeight: CGFloat = 22
 private let settingsTableHeaderHeight: CGFloat = 26
@@ -28,6 +28,156 @@ private func orderedSettingsLayouts(_ source: [RegionLayout]) -> [RegionLayout] 
         .filter { !settingsBuiltInLayoutOrder.contains($0.id) }
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     return builtIns + custom
+}
+
+@MainActor
+private final class ShortcutRecorderButton: NSButton {
+    var shortcut: KeyboardSnapShortcut {
+        didSet {
+            recording = false
+            updateTitle()
+            onShortcutChanged?(shortcut)
+        }
+    }
+    var onShortcutChanged: ((KeyboardSnapShortcut) -> Void)?
+
+    private var recording = false
+
+    init(shortcut: KeyboardSnapShortcut) {
+        self.shortcut = shortcut
+        super.init(frame: .zero)
+        bezelStyle = .rounded
+        target = self
+        action = #selector(startRecording)
+        updateTitle()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        guard recording else {
+            super.keyDown(with: event)
+            return
+        }
+
+        let modifiers = event.modifierFlags.intersection(KeyboardSnapShortcut.modifierMask)
+        guard !modifiers.isEmpty else {
+            NSSound.beep()
+            return
+        }
+
+        shortcut = KeyboardSnapShortcut(modifiers: modifiers, keyCode: event.keyCode)
+        window?.makeFirstResponder(nil)
+    }
+
+    override func resignFirstResponder() -> Bool {
+        recording = false
+        updateTitle()
+        return super.resignFirstResponder()
+    }
+
+    @objc
+    private func startRecording() {
+        recording = true
+        title = "Press shortcut..."
+        window?.makeFirstResponder(self)
+    }
+
+    private func updateTitle() {
+        title = recording ? "Press shortcut..." : shortcut.displayName
+    }
+}
+
+@MainActor
+private final class ModifierRecorderButton: NSButton {
+    var modifier: DragSnapModifier {
+        didSet {
+            recording = false
+            updateTitle()
+            onModifierChanged?(modifier)
+        }
+    }
+    var onModifierChanged: ((DragSnapModifier) -> Void)?
+
+    private var recording = false
+    private var pendingModifiers: NSEvent.ModifierFlags = []
+    private var recordingRevision = 0
+
+    init(modifier: DragSnapModifier) {
+        self.modifier = modifier
+        super.init(frame: .zero)
+        bezelStyle = .rounded
+        target = self
+        action = #selector(startRecording)
+        updateTitle()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func flagsChanged(with event: NSEvent) {
+        guard recording else {
+            super.flagsChanged(with: event)
+            return
+        }
+
+        let modifiers = event.modifierFlags.intersection(KeyboardSnapShortcut.modifierMask)
+        guard !modifiers.isEmpty else { return }
+
+        pendingModifiers = modifiers
+        title = DragSnapModifier(modifiers: modifiers).displayName
+        scheduleCommit()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard recording else {
+            super.keyDown(with: event)
+            return
+        }
+        NSSound.beep()
+    }
+
+    override func resignFirstResponder() -> Bool {
+        recording = false
+        pendingModifiers = []
+        recordingRevision += 1
+        updateTitle()
+        return super.resignFirstResponder()
+    }
+
+    @objc
+    private func startRecording() {
+        recording = true
+        pendingModifiers = []
+        recordingRevision += 1
+        title = "Press modifiers..."
+        window?.makeFirstResponder(self)
+    }
+
+    private func scheduleCommit() {
+        recordingRevision += 1
+        let revision = recordingRevision
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            guard let self, self.recording, self.recordingRevision == revision else { return }
+            guard !self.pendingModifiers.isEmpty else { return }
+            self.modifier = DragSnapModifier(modifiers: self.pendingModifiers)
+            self.pendingModifiers = []
+            self.window?.makeFirstResponder(nil)
+        }
+    }
+
+    private func updateTitle() {
+        title = recording ? "Press modifiers..." : modifier.displayName
+    }
 }
 
 /// AppKit window controller for the PanePilot Settings window.
@@ -54,13 +204,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     init(
         store: DisplayLayoutStore,
-        initialSnapModifier: SnapModifier,
-        onSnapModifierChanged: @escaping (SnapModifier) -> Void,
+        initialSnapModifier: DragSnapModifier,
+        initialKeyboardSnapShortcut: KeyboardSnapShortcut,
+        onSnapModifierChanged: @escaping (DragSnapModifier) -> Void,
+        onKeyboardSnapShortcutChanged: @escaping (KeyboardSnapShortcut) -> Void,
         onDebugLoggingChanged: @escaping (Bool) -> Void
     ) {
         self.generalViewController = GeneralSettingsViewController(
             initialSnapModifier: initialSnapModifier,
-            onSnapModifierChanged: onSnapModifierChanged
+            initialKeyboardSnapShortcut: initialKeyboardSnapShortcut,
+            onSnapModifierChanged: onSnapModifierChanged,
+            onKeyboardSnapShortcutChanged: onKeyboardSnapShortcutChanged
         )
         self.layoutsViewController = LayoutsSettingsViewController(store: store)
         self.debugViewController = DebugSettingsViewController(onDebugLoggingChanged: onDebugLoggingChanged)
@@ -181,28 +335,35 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
 @MainActor
 private final class GeneralSettingsViewController: NSViewController {
-    private let onSnapModifierChanged: (SnapModifier) -> Void
+    private let onSnapModifierChanged: (DragSnapModifier) -> Void
+    private let onKeyboardSnapShortcutChanged: (KeyboardSnapShortcut) -> Void
 
     private let startAtLoginCheckbox = NSButton(checkboxWithTitle: "Start at Login", target: nil, action: nil)
     private let startAtLoginInfoLabel = NSTextField(wrappingLabelWithString: "Automatically opens the app when you start your Mac.")
-    private let shortcutLabel = NSTextField(labelWithString: "Snap Modifier")
-    private let shortcutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let shortcutInfoLabel = NSTextField(wrappingLabelWithString: "Hold this key while dragging to activate snap regions.")
+    private let dragModifierLabel = NSTextField(labelWithString: "Drag Modifier")
+    private let dragModifierRecorder: ModifierRecorderButton
+    private let dragModifierResetButton = NSButton(title: "Reset", target: nil, action: nil)
+    private let dragModifierInfoLabel = NSTextField(wrappingLabelWithString: "")
+    private let keyboardShortcutLabel = NSTextField(labelWithString: "Keyboard Snap")
+    private let keyboardShortcutRecorder: ShortcutRecorderButton
+    private let keyboardShortcutResetButton = NSButton(title: "Reset", target: nil, action: nil)
+    private let keyboardShortcutInfoLabel = NSTextField(wrappingLabelWithString: "")
     private let accessibilityLabel = NSTextField(labelWithString: "")
     private let accessibilityButton = NSButton(title: "", target: nil, action: nil)
 
     // MARK: - Initialization
 
-    init(initialSnapModifier: SnapModifier, onSnapModifierChanged: @escaping (SnapModifier) -> Void) {
+    init(
+        initialSnapModifier: DragSnapModifier,
+        initialKeyboardSnapShortcut: KeyboardSnapShortcut,
+        onSnapModifierChanged: @escaping (DragSnapModifier) -> Void,
+        onKeyboardSnapShortcutChanged: @escaping (KeyboardSnapShortcut) -> Void
+    ) {
         self.onSnapModifierChanged = onSnapModifierChanged
+        self.onKeyboardSnapShortcutChanged = onKeyboardSnapShortcutChanged
+        self.dragModifierRecorder = ModifierRecorderButton(modifier: initialSnapModifier)
+        self.keyboardShortcutRecorder = ShortcutRecorderButton(shortcut: initialKeyboardSnapShortcut)
         super.init(nibName: nil, bundle: nil)
-
-        shortcutPopup.addItems(withTitles: SnapModifier.allCases.map(\.displayName))
-        if let idx = SnapModifier.allCases.firstIndex(of: initialSnapModifier) {
-            shortcutPopup.selectItem(at: idx)
-        } else if let idx = SnapModifier.allCases.firstIndex(of: .command) {
-            shortcutPopup.selectItem(at: idx)
-        }
     }
 
     @available(*, unavailable)
@@ -240,15 +401,39 @@ private final class GeneralSettingsViewController: NSViewController {
         startAtLoginInfoLabel.textColor = .secondaryLabelColor
         startAtLoginInfoLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
 
-        shortcutLabel.translatesAutoresizingMaskIntoConstraints = false
+        dragModifierLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        shortcutPopup.translatesAutoresizingMaskIntoConstraints = false
-        shortcutPopup.target = self
-        shortcutPopup.action = #selector(shortcutChanged)
+        dragModifierRecorder.translatesAutoresizingMaskIntoConstraints = false
+        dragModifierRecorder.onModifierChanged = { [weak self] modifier in
+            self?.handleDragModifierChanged(modifier)
+        }
 
-        shortcutInfoLabel.translatesAutoresizingMaskIntoConstraints = false
-        shortcutInfoLabel.textColor = .secondaryLabelColor
-        shortcutInfoLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        dragModifierResetButton.translatesAutoresizingMaskIntoConstraints = false
+        dragModifierResetButton.bezelStyle = .rounded
+        dragModifierResetButton.target = self
+        dragModifierResetButton.action = #selector(resetDragModifier)
+
+        dragModifierInfoLabel.translatesAutoresizingMaskIntoConstraints = false
+        dragModifierInfoLabel.textColor = .secondaryLabelColor
+        dragModifierInfoLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        updateDragModifierInfo()
+
+        keyboardShortcutLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        keyboardShortcutRecorder.translatesAutoresizingMaskIntoConstraints = false
+        keyboardShortcutRecorder.onShortcutChanged = { [weak self] shortcut in
+            self?.handleKeyboardShortcutChanged(shortcut)
+        }
+
+        keyboardShortcutResetButton.translatesAutoresizingMaskIntoConstraints = false
+        keyboardShortcutResetButton.bezelStyle = .rounded
+        keyboardShortcutResetButton.target = self
+        keyboardShortcutResetButton.action = #selector(resetKeyboardShortcut)
+
+        keyboardShortcutInfoLabel.translatesAutoresizingMaskIntoConstraints = false
+        keyboardShortcutInfoLabel.textColor = .secondaryLabelColor
+        keyboardShortcutInfoLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        updateKeyboardShortcutInfo()
 
         accessibilityLabel.translatesAutoresizingMaskIntoConstraints = false
         accessibilityLabel.textColor = .secondaryLabelColor
@@ -261,9 +446,14 @@ private final class GeneralSettingsViewController: NSViewController {
 
         view.addSubview(startAtLoginCheckbox)
         view.addSubview(startAtLoginInfoLabel)
-        view.addSubview(shortcutLabel)
-        view.addSubview(shortcutPopup)
-        view.addSubview(shortcutInfoLabel)
+        view.addSubview(dragModifierLabel)
+        view.addSubview(dragModifierRecorder)
+        view.addSubview(dragModifierResetButton)
+        view.addSubview(dragModifierInfoLabel)
+        view.addSubview(keyboardShortcutLabel)
+        view.addSubview(keyboardShortcutRecorder)
+        view.addSubview(keyboardShortcutResetButton)
+        view.addSubview(keyboardShortcutInfoLabel)
         view.addSubview(accessibilityLabel)
         view.addSubview(accessibilityButton)
 
@@ -275,19 +465,39 @@ private final class GeneralSettingsViewController: NSViewController {
             startAtLoginInfoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
             startAtLoginInfoLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
-            shortcutLabel.topAnchor.constraint(equalTo: startAtLoginInfoLabel.bottomAnchor, constant: 20),
-            shortcutLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
-            shortcutLabel.centerYAnchor.constraint(equalTo: shortcutPopup.centerYAnchor),
+            dragModifierLabel.topAnchor.constraint(equalTo: startAtLoginInfoLabel.bottomAnchor, constant: 18),
+            dragModifierLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
+            dragModifierLabel.centerYAnchor.constraint(equalTo: dragModifierRecorder.centerYAnchor),
 
-            shortcutPopup.topAnchor.constraint(equalTo: startAtLoginInfoLabel.bottomAnchor, constant: 20),
-            shortcutPopup.leadingAnchor.constraint(equalTo: shortcutLabel.trailingAnchor, constant: 12),
-            shortcutPopup.widthAnchor.constraint(equalToConstant: 190),
+            dragModifierRecorder.topAnchor.constraint(equalTo: startAtLoginInfoLabel.bottomAnchor, constant: 18),
+            dragModifierRecorder.leadingAnchor.constraint(equalTo: dragModifierLabel.trailingAnchor, constant: 12),
+            dragModifierRecorder.widthAnchor.constraint(equalToConstant: 190),
 
-            shortcutInfoLabel.topAnchor.constraint(equalTo: shortcutPopup.bottomAnchor, constant: 8),
-            shortcutInfoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
-            shortcutInfoLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            dragModifierResetButton.leadingAnchor.constraint(equalTo: dragModifierRecorder.trailingAnchor, constant: 8),
+            dragModifierResetButton.centerYAnchor.constraint(equalTo: dragModifierRecorder.centerYAnchor),
+            dragModifierResetButton.widthAnchor.constraint(equalToConstant: 64),
 
-            accessibilityLabel.topAnchor.constraint(equalTo: shortcutInfoLabel.bottomAnchor, constant: 20),
+            dragModifierInfoLabel.topAnchor.constraint(equalTo: dragModifierRecorder.bottomAnchor, constant: 6),
+            dragModifierInfoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
+            dragModifierInfoLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+
+            keyboardShortcutLabel.topAnchor.constraint(equalTo: dragModifierInfoLabel.bottomAnchor, constant: 16),
+            keyboardShortcutLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
+            keyboardShortcutLabel.centerYAnchor.constraint(equalTo: keyboardShortcutRecorder.centerYAnchor),
+
+            keyboardShortcutRecorder.topAnchor.constraint(equalTo: dragModifierInfoLabel.bottomAnchor, constant: 16),
+            keyboardShortcutRecorder.leadingAnchor.constraint(equalTo: keyboardShortcutLabel.trailingAnchor, constant: 12),
+            keyboardShortcutRecorder.widthAnchor.constraint(equalToConstant: 190),
+
+            keyboardShortcutResetButton.leadingAnchor.constraint(equalTo: keyboardShortcutRecorder.trailingAnchor, constant: 8),
+            keyboardShortcutResetButton.centerYAnchor.constraint(equalTo: keyboardShortcutRecorder.centerYAnchor),
+            keyboardShortcutResetButton.widthAnchor.constraint(equalToConstant: 64),
+
+            keyboardShortcutInfoLabel.topAnchor.constraint(equalTo: keyboardShortcutRecorder.bottomAnchor, constant: 6),
+            keyboardShortcutInfoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
+            keyboardShortcutInfoLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+
+            accessibilityLabel.topAnchor.constraint(equalTo: keyboardShortcutInfoLabel.bottomAnchor, constant: 18),
             accessibilityLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
             accessibilityLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
@@ -309,10 +519,43 @@ private final class GeneralSettingsViewController: NSViewController {
     }
 
     @objc
-    private func shortcutChanged() {
-        let idx = shortcutPopup.indexOfSelectedItem
-        guard idx >= 0, idx < SnapModifier.allCases.count else { return }
-        onSnapModifierChanged(SnapModifier.allCases[idx])
+    private func resetDragModifier() {
+        dragModifierRecorder.modifier = .defaultModifier
+    }
+
+    private func handleDragModifierChanged(_ modifier: DragSnapModifier) {
+        updateDragModifierInfo()
+        onSnapModifierChanged(modifier)
+    }
+
+    private func updateDragModifierInfo() {
+        if let warning = dragModifierRecorder.modifier.warningMessage {
+            dragModifierInfoLabel.textColor = .systemOrange
+            dragModifierInfoLabel.stringValue = warning
+        } else {
+            dragModifierInfoLabel.textColor = .secondaryLabelColor
+            dragModifierInfoLabel.stringValue = "Hold this modifier while dragging to activate snap regions."
+        }
+    }
+
+    @objc
+    private func resetKeyboardShortcut() {
+        keyboardShortcutRecorder.shortcut = .defaultShortcut
+    }
+
+    private func handleKeyboardShortcutChanged(_ shortcut: KeyboardSnapShortcut) {
+        updateKeyboardShortcutInfo()
+        onKeyboardSnapShortcutChanged(shortcut)
+    }
+
+    private func updateKeyboardShortcutInfo() {
+        if let warning = keyboardShortcutRecorder.shortcut.warningMessage {
+            keyboardShortcutInfoLabel.textColor = .systemOrange
+            keyboardShortcutInfoLabel.stringValue = warning
+        } else {
+            keyboardShortcutInfoLabel.textColor = .secondaryLabelColor
+            keyboardShortcutInfoLabel.stringValue = "Opens the snap picker without dragging."
+        }
     }
 
     @objc

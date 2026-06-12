@@ -8,21 +8,42 @@ import Foundation
 /// `UserDefaults.standard` immediately — there is no separate "save" step.
 enum AppPreferences {
     private static let snapModifierKey = "snapModifier"
+    private static let keyboardSnapShortcutKey = "keyboardSnapShortcut"
     private static let debugLoggingEnabledKey = "debugLoggingEnabled"
 
     // MARK: - Drag Snap
 
-    /// The keyboard modifier the user must hold while dragging to activate snap.
+    /// The keyboard modifier combination the user must hold while dragging to activate snap.
     ///
-    /// Defaults to `.command` on first launch. The raw string value is persisted so the
-    /// preference survives app updates that reorder or rename enum cases.
-    static var snapModifier: SnapModifier {
+    /// Defaults to Command on first launch. Legacy single-modifier raw values are still
+    /// accepted so older user preferences migrate without a separate migration step.
+    static var snapModifier: DragSnapModifier {
         get {
-            let raw = UserDefaults.standard.string(forKey: snapModifierKey) ?? SnapModifier.command.rawValue
-            return SnapModifier(rawValue: raw) ?? .command
+            guard let raw = UserDefaults.standard.string(forKey: snapModifierKey),
+                  let modifier = DragSnapModifier(rawValue: raw) else {
+                return .defaultModifier
+            }
+            return modifier
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: snapModifierKey)
+        }
+    }
+
+    /// The complete hotkey that opens keyboard snap mode without dragging.
+    ///
+    /// Defaults to Command + 1. Stored independently from the drag snap modifier
+    /// so users can avoid conflicts in either workflow without coupling the two settings.
+    static var keyboardSnapShortcut: KeyboardSnapShortcut {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: keyboardSnapShortcutKey),
+                  let shortcut = KeyboardSnapShortcut(rawValue: raw) else {
+                return .defaultShortcut
+            }
+            return shortcut
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: keyboardSnapShortcutKey)
         }
     }
 

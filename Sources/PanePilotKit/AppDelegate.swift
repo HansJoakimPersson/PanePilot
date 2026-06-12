@@ -101,6 +101,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             displayLayoutStore: store
         )
         dragController.setRequiredModifier(AppPreferences.snapModifier)
+        dragController.setKeyboardSnapShortcut(AppPreferences.keyboardSnapShortcut)
         return dragController
     }
 
@@ -123,4 +124,3 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         DebugLogger.shared.info("Screen parameters changed. Display registry refreshed.")
     }
 }
-

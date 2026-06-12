@@ -93,9 +93,14 @@ public final class SettingsWindowPresenter {
         let controller = SettingsWindowController(
             store: store,
             initialSnapModifier: AppPreferences.snapModifier,
+            initialKeyboardSnapShortcut: AppPreferences.keyboardSnapShortcut,
             onSnapModifierChanged: { [weak self] modifier in
                 AppPreferences.snapModifier = modifier
                 self?.dragSnapController?.setRequiredModifier(modifier)
+            },
+            onKeyboardSnapShortcutChanged: { [weak self] shortcut in
+                AppPreferences.keyboardSnapShortcut = shortcut
+                self?.dragSnapController?.setKeyboardSnapShortcut(shortcut)
             },
             onDebugLoggingChanged: { enabled in
                 DebugLogger.shared.setEnabled(enabled)

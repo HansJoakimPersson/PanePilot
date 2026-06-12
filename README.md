@@ -30,7 +30,7 @@ Releases are published through GitHub. Public notarized downloads and an App Sto
 
 - Runs from the macOS menu bar.
 - **Snap picker popup** — hold the configured modifier while dragging and a thumbnail row appears at the top of the screen showing all available layouts. Hover any zone to see a full-screen preview, then release to snap.
-- **Keyboard snap** — press modifier + Escape (no drag needed) to open the picker, then type the layout number followed by the zone number (e.g. `1` then `2` for layout 1, zone 2).
+- **Keyboard snap** — press the configured keyboard snap hotkey (default: `Command + 1`) to open the picker, then type the layout number followed by the zone number (e.g. `1` then `2` for layout 1, zone 2).
 - **Numbered zones** — every zone displays its number in the picker thumbnail and in the full-screen preview so keyboard navigation is always visible.
 - Includes built-in `40 / 60`, `60 / 40`, mirrored widescreen layouts, and multi-column layouts inspired by Amethyst.
 - Exposes Start at Login for signed app bundles.
@@ -42,7 +42,7 @@ Releases are published through GitHub. Public notarized downloads and an App Sto
 2. Move `PanePilot.app` to the `Applications` folder.
 3. Launch `PanePilot`.
 4. Grant Accessibility access in `System Settings` > `Privacy & Security`.
-5. Open `Settings…` to choose the snap modifier.
+5. Open `Settings…` to choose the drag modifier and keyboard snap hotkey.
 
 **Drag to snap:**
 1. Hold the configured modifier and start dragging a window.
@@ -51,11 +51,12 @@ Releases are published through GitHub. Public notarized downloads and an App Sto
 4. Release the mouse button to snap.
 
 **Keyboard snap (no drag required):**
-1. Hold the modifier and press Escape.
+1. Press the configured keyboard snap hotkey.
 2. The picker appears over the frontmost window.
 3. Press the layout number (shown in the top-left badge of each thumbnail).
 4. Press the zone number (shown centred in each zone).
-5. The window snaps and the picker closes.
+5. Press Escape while choosing a zone to return to layout selection; press Escape from layout selection to cancel.
+6. The window snaps and the picker closes.
 
 PanePilot uses the macOS Accessibility APIs to detect the active window, inspect its current frame, and move or resize it when a snap is confirmed.
 
@@ -70,7 +71,7 @@ PanePilot uses the macOS Accessibility APIs to detect the active window, inspect
 - Target platform: macOS 13 or newer.
 - Accessibility permission is required before snapping works.
 - Some apps enforce minimum window sizes, so PanePilot may need to correct the final frame after a snap attempt.
-- The keyboard snap modifier + Escape shortcut cannot be intercepted — it also reaches the frontmost app. Choose a modifier that does not conflict with global shortcuts in your commonly used apps.
+- Keyboard snap uses an Accessibility event tap to consume its trigger, layout/zone digits, and Escape before they reach the frontmost app. If the event tap cannot be created, Keyboard snap remains unavailable instead of leaking those keys.
 - Start at Login is only available when PanePilot is running from a signed `.app` bundle.
 - Public notarized distribution and an App Store submission path are not set up yet.
 

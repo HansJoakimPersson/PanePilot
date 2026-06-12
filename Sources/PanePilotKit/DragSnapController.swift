@@ -1,6 +1,103 @@
 import AppKit
 import Foundation
 
+struct KeyboardSnapKeyInput {
+    static let cancelKeyCode: UInt16 = 53 // kVK_Escape
+
+    let shortcut: KeyboardSnapShortcut
+
+    func startsKeyboardSnap(keyCode: UInt16, modifierFlags: NSEvent.ModifierFlags) -> Bool {
+        shortcut.matches(keyCode: keyCode, modifierFlags: modifierFlags)
+    }
+
+    func digit(from keyCode: UInt16) -> Int? {
+        switch keyCode {
+        // ANSI top row
+        case 18: return 1
+        case 19: return 2
+        case 20: return 3
+        case 21: return 4
+        case 23: return 5
+        case 22: return 6
+        case 26: return 7
+        case 28: return 8
+        case 25: return 9
+        // Numpad
+        case 83: return 1
+        case 84: return 2
+        case 85: return 3
+        case 86: return 4
+        case 87: return 5
+        case 88: return 6
+        case 89: return 7
+        case 91: return 8
+        case 92: return 9
+        default: return nil
+        }
+    }
+}
+
+enum KeyboardSnapEventAction: Equatable {
+    case passThrough
+    case activate
+    case selectDigit(Int)
+    case escape
+}
+
+struct KeyboardSnapEventRouter {
+    let shortcut: KeyboardSnapShortcut
+
+    func action(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags,
+        keyboardSnapActive: Bool
+    ) -> KeyboardSnapEventAction {
+        let keyInput = KeyboardSnapKeyInput(shortcut: shortcut)
+
+        if keyboardSnapActive {
+            if keyCode == KeyboardSnapKeyInput.cancelKeyCode {
+                return .escape
+            }
+            if let digit = keyInput.digit(from: keyCode) {
+                return .selectDigit(digit)
+            }
+            return .passThrough
+        }
+
+        if keyInput.startsKeyboardSnap(keyCode: keyCode, modifierFlags: modifierFlags) {
+            return .activate
+        }
+        return .passThrough
+    }
+}
+
+enum KeyboardSnapEscapeAction: Equatable {
+    case cancel
+    case returnToLayoutSelection
+}
+
+struct KeyboardSnapProgress: Equatable {
+    private(set) var selectedLayoutIndex: Int?
+
+    var isAwaitingZoneSelection: Bool {
+        selectedLayoutIndex != nil
+    }
+
+    mutating func selectLayout(at index: Int) {
+        selectedLayoutIndex = index
+    }
+
+    mutating func resetToLayoutSelection() {
+        selectedLayoutIndex = nil
+    }
+
+    mutating func handleEscape() -> KeyboardSnapEscapeAction {
+        guard isAwaitingZoneSelection else { return .cancel }
+        resetToLayoutSelection()
+        return .returnToLayoutSelection
+    }
+}
+
 /// Observes global mouse and keyboard events and drives the full snap interaction lifecycle.
 ///
 /// **Drag snap flow** (modifier + drag):
@@ -10,19 +107,16 @@ import Foundation
 /// 4. Hit-tests the picker on every drag event and shows a preview overlay via `OverlayWindowController`.
 /// 5. On mouse-up, if a picker region is hovered, moves and resizes the window to match.
 ///
-/// **Keyboard snap flow** (modifier + trigger key, then layout# + zone#):
-/// 1. User holds the snap modifier and presses the keyboard-snap trigger key (default: Escape).
+/// **Keyboard snap flow** (configured hotkey, then layout# + zone#):
+/// 1. User presses the configured keyboard snap hotkey.
 /// 2. Controller snapshots the frontmost window and shows the picker.
 /// 3. User presses a layout index digit (1–9): the layout is selected.
 /// 4. User presses a zone index digit (1–9): the window snaps and the picker dismisses.
-/// 5. Pressing Escape at any point cancels keyboard snap mode.
+/// 5. Pressing Escape while choosing a zone returns to layout selection; pressing it
+///    from layout selection cancels keyboard snap mode.
 ///
-/// All monitors must be registered *after* Accessibility is granted; call `restart()` if
-/// permission arrives late.
-///
-/// > Note: Global `NSEvent` monitors deliver copies of events — they cannot intercept them.
-/// > This means that during keyboard snap the key presses are also delivered to the frontmost
-/// > application. A future implementation could use `CGEventTap` to suppress them.
+/// All monitors and the keyboard event tap must be registered *after* Accessibility is granted;
+/// call `restart()` if permission arrives late.
 @MainActor
 final class DragSnapController {
     private let permissions: PermissionManager
@@ -50,30 +144,24 @@ final class DragSnapController {
     private var hoveredSelection: (layout: RegionLayout, region: RegionLayout.Region)?
 
     // MARK: Keyboard snap state
-    /// Keyboard event monitors (separate from the drag mouse monitors).
-    private var globalKeyboardMonitor: Any?
-    private var localKeyboardMonitor: Any?
+    /// Active event filter that removes consumed keyboard-snap keys from the system event stream.
+    private let keyboardEventInterceptor = KeyboardEventInterceptor()
     /// `true` while the picker is shown via keyboard (not drag).
     private var keyboardSnapActive = false
     /// AX snapshot of the window to snap, captured when keyboard snap mode activates.
     private var keyboardSnapSnapshot: FocusedWindowSnapshot?
     /// The screen the keyboard-snap target window lives on.
     private var keyboardSnapScreen: NSScreen?
-    /// Layout index (0-based) selected by the first digit keypress, awaiting zone digit.
-    private var pendingKeyboardLayoutIndex: Int?
+    /// Tracks whether keyboard snap is choosing a layout or a zone.
+    private var keyboardSnapProgress = KeyboardSnapProgress()
 
     // MARK: Shared
     private let logger = DebugLogger.shared
     private let displayLayoutStore: DisplayLayoutStore
     private let selfPID = ProcessInfo.processInfo.processIdentifier
     private var requiresModifierKey = true
-    private var requiredModifier: SnapModifier = .command
-
-    /// Key code for the keyboard-snap trigger (default: Escape, kVK_Escape = 53).
-    ///
-    /// The user holds the snap modifier and presses this key to show the picker without
-    /// dragging. Configurable in a future Settings release.
-    private static let keyboardSnapTriggerKeyCode: UInt16 = 53 // kVK_Escape
+    private var requiredModifier: DragSnapModifier = .defaultModifier
+    private var keyboardSnapShortcut: KeyboardSnapShortcut = .defaultShortcut
 
     init(
         permissions: PermissionManager,
@@ -109,17 +197,14 @@ final class DragSnapController {
             handler: { [weak self] event in self?.handle(event: event); return event }
         )
 
-        // Separate keyboard monitors so they can be removed independently if needed.
-        globalKeyboardMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.keyDown, .flagsChanged],
-            handler: { [weak self] event in
-                DispatchQueue.main.async { [weak self] in self?.handleKeyEvent(event) }
-            }
-        )
-        localKeyboardMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.keyDown, .flagsChanged],
-            handler: { [weak self] event in self?.handleKeyEvent(event); return event }
-        )
+        let keyboardInterceptionStarted = keyboardEventInterceptor.start { [weak self] keyCode, modifiers in
+            self?.handleKeyboardKeyDown(keyCode: keyCode, modifierFlags: modifiers) ?? false
+        }
+        if keyboardInterceptionStarted {
+            logger.info("Keyboard event interception started.")
+        } else {
+            logger.error("Keyboard snap unavailable: unable to create an Accessibility event tap.")
+        }
     }
 
     /// Stops and immediately restarts all event monitors.
@@ -134,13 +219,12 @@ final class DragSnapController {
 
     /// Removes all event monitors.
     func stop() {
-        [globalMonitor, localMonitor, globalKeyboardMonitor, localKeyboardMonitor]
+        [globalMonitor, localMonitor]
             .compactMap { $0 }
             .forEach { NSEvent.removeMonitor($0) }
         globalMonitor = nil
         localMonitor = nil
-        globalKeyboardMonitor = nil
-        localKeyboardMonitor = nil
+        keyboardEventInterceptor.stop()
     }
 
     // MARK: - Configuration
@@ -157,10 +241,15 @@ final class DragSnapController {
         if required, !isModifierActive() { resetPicker() }
     }
 
-    func setRequiredModifier(_ modifier: SnapModifier) {
+    func setRequiredModifier(_ modifier: DragSnapModifier) {
         requiredModifier = modifier
         logger.info("Snap modifier changed to \(modifier.displayName)")
         if requiresModifierKey, !isModifierActive() { resetPicker() }
+    }
+
+    func setKeyboardSnapShortcut(_ shortcut: KeyboardSnapShortcut) {
+        keyboardSnapShortcut = shortcut
+        logger.info("Keyboard snap shortcut changed to \(shortcut.displayName)")
     }
 
     // MARK: - Mouse Event Handling
@@ -196,6 +285,9 @@ final class DragSnapController {
         }
         guard permissions.ensureAccessibilityPermission(prompt: false) else { return }
         guard let down = mouseDownLocation else { return }
+        if initialWindowSnapshot == nil {
+            initialWindowSnapshot = windowController.snapshotWindowForDrag(at: NSEvent.mouseLocation)
+        }
         guard let initialSnapshot = initialWindowSnapshot else { return }
         guard shouldConsiderWindow(initialSnapshot) else { return }
 
@@ -272,14 +364,6 @@ final class DragSnapController {
             logger.info("Snap canceled: filtered window app=\(snapshot.appName) pid=\(snapshot.pid) role=\(snapshot.role)/\(snapshot.subrole)")
             return
         }
-        guard snapshot.positionSettable, snapshot.sizeSettable else {
-            logger.warn(
-                "Snap aborted: window not settable app=\(snapshot.appName) role=\(snapshot.role)/\(snapshot.subrole) " +
-                "settable(pos=\(snapshot.positionSettable),size=\(snapshot.sizeSettable))"
-            )
-            return
-        }
-
         do {
             try applySnap(snapshot: snapshot, to: region, on: screen, layout: layout)
         } catch {
@@ -293,53 +377,66 @@ final class DragSnapController {
 
     // MARK: - Keyboard Event Handling
 
-    private func handleKeyEvent(_ event: NSEvent) {
-        if event.type == .flagsChanged {
-            // Keyboard snap mode does NOT auto-cancel on modifier release — the user releases
-            // the modifier and then types the layout/zone digits.
-            return
-        }
-        guard event.type == .keyDown else { return }
-
-        let keyCode = event.keyCode
-
-        if !keyboardSnapActive {
-            // Check for modifier + trigger key to activate keyboard snap mode.
-            if requiresModifierKey,
-               isModifierActive(),
-               keyCode == Self.keyboardSnapTriggerKeyCode {
-                activateKeyboardSnap()
+    private func handleKeyboardKeyDown(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> Bool {
+        let router = KeyboardSnapEventRouter(shortcut: keyboardSnapShortcut)
+        switch router.action(
+            keyCode: keyCode,
+            modifierFlags: modifierFlags,
+            keyboardSnapActive: keyboardSnapActive
+        ) {
+        case .passThrough:
+            return false
+        case .activate:
+            // Mark the mode active before yielding so immediately following selection keys
+            // are consumed while the Accessibility snapshot is queued on the main actor.
+            keyboardSnapActive = true
+            DispatchQueue.main.async { [weak self] in
+                self?.activateKeyboardSnap()
             }
-        } else {
-            // Escape cancels keyboard snap mode.
-            if keyCode == 53 { // kVK_Escape
-                cancelKeyboardSnap()
-                return
+            return true
+        case let .selectDigit(digit):
+            DispatchQueue.main.async { [weak self] in
+                self?.handleKeyboardSnapDigit(digit)
             }
-            if let digit = snapDigit(from: keyCode) {
-                handleKeyboardSnapDigit(digit)
+            return true
+        case .escape:
+            DispatchQueue.main.async { [weak self] in
+                self?.handleKeyboardSnapEscape()
             }
+            return true
         }
     }
 
     /// Activates keyboard snap mode by snapshotting the frontmost window and showing the picker.
     private func activateKeyboardSnap() {
-        guard isEnabled else { return }
-        guard permissions.ensureAccessibilityPermission(prompt: false) else { return }
-
-        guard let snapshot = windowController.snapshotFocusedWindow(),
-              shouldConsiderWindow(snapshot),
-              snapshot.positionSettable, snapshot.sizeSettable else {
-            logger.info("Keyboard snap: no eligible frontmost window.")
+        guard isEnabled else {
+            cancelKeyboardSnap()
+            return
+        }
+        guard permissions.ensureAccessibilityPermission(prompt: false) else {
+            cancelKeyboardSnap()
             return
         }
 
-        guard let screen = screenForWindow(snapshot) else { return }
+        guard let snapshot = windowController.snapshotFocusedWindow(),
+              shouldConsiderWindow(snapshot) else {
+            logger.info("Keyboard snap: no eligible frontmost window.")
+            cancelKeyboardSnap()
+            return
+        }
+
+        guard let screen = screenForWindow(snapshot) else {
+            cancelKeyboardSnap()
+            return
+        }
 
         keyboardSnapActive = true
         keyboardSnapSnapshot = snapshot
         keyboardSnapScreen = screen
-        pendingKeyboardLayoutIndex = nil
+        keyboardSnapProgress.resetToLayoutSelection()
 
         snapPickerController.show(layouts: displayLayoutStore.orderedLayouts(), on: screen)
         logger.info("Keyboard snap activated for '\(snapshot.windowTitle)'")
@@ -352,7 +449,7 @@ final class DragSnapController {
     private func handleKeyboardSnapDigit(_ digit: Int) {
         let layouts = displayLayoutStore.orderedLayouts()
 
-        if pendingKeyboardLayoutIndex == nil {
+        if !keyboardSnapProgress.isAwaitingZoneSelection {
             // First digit: pick a layout.
             let index = digit - 1
             guard index < layouts.count else {
@@ -360,7 +457,7 @@ final class DragSnapController {
                 cancelKeyboardSnap()
                 return
             }
-            pendingKeyboardLayoutIndex = index
+            keyboardSnapProgress.selectLayout(at: index)
             let layout = layouts[index]
             logger.info("Keyboard snap: layout \(digit) '\(layout.name)' selected, awaiting zone.")
 
@@ -372,7 +469,7 @@ final class DragSnapController {
 
         } else {
             // Second digit: pick a zone and snap.
-            let layoutIndex = pendingKeyboardLayoutIndex!
+            let layoutIndex = keyboardSnapProgress.selectedLayoutIndex!
             let layout = layouts[layoutIndex]
             let regionIndex = digit - 1
             guard regionIndex < layout.regions.count else {
@@ -397,11 +494,22 @@ final class DragSnapController {
         }
     }
 
+    private func handleKeyboardSnapEscape() {
+        switch keyboardSnapProgress.handleEscape() {
+        case .cancel:
+            cancelKeyboardSnap()
+        case .returnToLayoutSelection:
+            snapPickerController.setHoveredRegion(layoutID: nil, regionID: nil)
+            previewOverlayController.hide()
+            logger.info("Keyboard snap: returned to layout selection.")
+        }
+    }
+
     private func cancelKeyboardSnap() {
         keyboardSnapActive = false
         keyboardSnapSnapshot = nil
         keyboardSnapScreen = nil
-        pendingKeyboardLayoutIndex = nil
+        keyboardSnapProgress.resetToLayoutSelection()
         snapPickerController.hide()
         previewOverlayController.hide()
         logger.info("Keyboard snap cancelled.")
@@ -410,33 +518,6 @@ final class DragSnapController {
     /// Returns the `NSScreen` that contains the centre of the given window.
     private func screenForWindow(_ snapshot: FocusedWindowSnapshot) -> NSScreen? {
         screen(at: CGPoint(x: snapshot.frame.midX, y: snapshot.frame.midY))
-    }
-
-    /// Maps ANSI and numpad key codes 1–9 to their integer values.
-    private func snapDigit(from keyCode: UInt16) -> Int? {
-        switch keyCode {
-        // ANSI top row
-        case 18: return 1
-        case 19: return 2
-        case 20: return 3
-        case 21: return 4
-        case 23: return 5
-        case 22: return 6
-        case 26: return 7
-        case 28: return 8
-        case 25: return 9
-        // Numpad
-        case 83: return 1
-        case 84: return 2
-        case 85: return 3
-        case 86: return 4
-        case 87: return 5
-        case 88: return 6
-        case 89: return 7
-        case 91: return 8
-        case 92: return 9
-        default: return nil
-        }
     }
 
     // MARK: - Snap Application
@@ -498,17 +579,15 @@ final class DragSnapController {
     }
 
     private func isSameWindow(_ lhs: FocusedWindowSnapshot, _ rhs: FocusedWindowSnapshot) -> Bool {
-        guard lhs.pid == rhs.pid, lhs.role == rhs.role, lhs.subrole == rhs.subrole else {
-            return false
-        }
-        if lhs.windowTitle == rhs.windowTitle { return true }
+        guard lhs.pid == rhs.pid else { return false }
+        if CFEqual(lhs.element, rhs.element) { return true }
+        if lhs.windowTitle != "n/a", lhs.windowTitle == rhs.windowTitle { return true }
         return abs(lhs.frame.width - rhs.frame.width) < 2 && abs(lhs.frame.height - rhs.frame.height) < 2
     }
 
     private func shouldConsiderWindow(_ snapshot: FocusedWindowSnapshot) -> Bool {
         guard snapshot.pid != selfPID else { return false }
         guard snapshot.subrole != "AXDialog", snapshot.role != "AXSheet" else { return false }
-        guard snapshot.sizeSettable else { return false }
         return true
     }
 
@@ -543,7 +622,7 @@ final class DragSnapController {
     }
 
     private func isModifierActive() -> Bool {
-        !requiresModifierKey || NSEvent.modifierFlags.contains(requiredModifier.eventFlag)
+        !requiresModifierKey || requiredModifier.matches(modifierFlags: NSEvent.modifierFlags)
     }
 
     private func snapVisibleFrame(for screen: NSScreen) -> CGRect {

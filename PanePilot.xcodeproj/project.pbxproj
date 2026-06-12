@@ -33,6 +33,10 @@
 		000000000000000000000056 /* WindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000055 /* WindowController.swift */; };
 		000000000000000000000058 /* LayoutEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000057 /* LayoutEngineTests.swift */; };
 		00000000000000000000005A /* RegionLayoutsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000059 /* RegionLayoutsTests.swift */; };
+		000000000000000000000062 /* KeyboardSnapKeyInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000061 /* KeyboardSnapKeyInputTests.swift */; };
+		000000000000000000000064 /* KeyboardSnapShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000063 /* KeyboardSnapShortcut.swift */; };
+		000000000000000000000066 /* KeyboardSnapShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000065 /* KeyboardSnapShortcutTests.swift */; };
+		000000000000000000000068 /* KeyboardEventInterceptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000067 /* KeyboardEventInterceptor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -96,6 +100,10 @@
 		000000000000000000000055 /* WindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WindowController.swift; path = Sources/PanePilotKit/WindowController.swift; sourceTree = SOURCE_ROOT; };
 		000000000000000000000057 /* LayoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LayoutEngineTests.swift; path = Tests/PanePilotKitTests/LayoutEngineTests.swift; sourceTree = SOURCE_ROOT; };
 		000000000000000000000059 /* RegionLayoutsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RegionLayoutsTests.swift; path = Tests/PanePilotKitTests/RegionLayoutsTests.swift; sourceTree = SOURCE_ROOT; };
+		000000000000000000000061 /* KeyboardSnapKeyInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeyboardSnapKeyInputTests.swift; path = Tests/PanePilotKitTests/KeyboardSnapKeyInputTests.swift; sourceTree = SOURCE_ROOT; };
+		000000000000000000000063 /* KeyboardSnapShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeyboardSnapShortcut.swift; path = Sources/PanePilotKit/KeyboardSnapShortcut.swift; sourceTree = SOURCE_ROOT; };
+		000000000000000000000065 /* KeyboardSnapShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeyboardSnapShortcutTests.swift; path = Tests/PanePilotKitTests/KeyboardSnapShortcutTests.swift; sourceTree = SOURCE_ROOT; };
+		000000000000000000000067 /* KeyboardEventInterceptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KeyboardEventInterceptor.swift; path = Sources/PanePilotKit/KeyboardEventInterceptor.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -176,6 +184,8 @@
 				00000000000000000000003D /* DebugLogger.swift */,
 				00000000000000000000003F /* DisplayLayoutStore.swift */,
 				000000000000000000000041 /* DragSnapController.swift */,
+				000000000000000000000067 /* KeyboardEventInterceptor.swift */,
+				000000000000000000000063 /* KeyboardSnapShortcut.swift */,
 				000000000000000000000043 /* LayoutEngine.swift */,
 				000000000000000000000045 /* LoginItemManager.swift */,
 				000000000000000000000047 /* OverlayWindowController.swift */,
@@ -195,6 +205,8 @@
 		000000000000000000000007 /* PanePilotKitTests */ = {
 			isa = PBXGroup;
 			children = (
+				000000000000000000000061 /* KeyboardSnapKeyInputTests.swift */,
+				000000000000000000000065 /* KeyboardSnapShortcutTests.swift */,
 				000000000000000000000057 /* LayoutEngineTests.swift */,
 				000000000000000000000059 /* RegionLayoutsTests.swift */,
 			);
@@ -355,6 +367,8 @@
 				00000000000000000000003E /* DebugLogger.swift in Sources */,
 				000000000000000000000040 /* DisplayLayoutStore.swift in Sources */,
 				000000000000000000000042 /* DragSnapController.swift in Sources */,
+				000000000000000000000068 /* KeyboardEventInterceptor.swift in Sources */,
+				000000000000000000000064 /* KeyboardSnapShortcut.swift in Sources */,
 				000000000000000000000044 /* LayoutEngine.swift in Sources */,
 				000000000000000000000046 /* LoginItemManager.swift in Sources */,
 				000000000000000000000048 /* OverlayWindowController.swift in Sources */,
@@ -373,6 +387,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				000000000000000000000062 /* KeyboardSnapKeyInputTests.swift in Sources */,
+				000000000000000000000066 /* KeyboardSnapShortcutTests.swift in Sources */,
 				000000000000000000000058 /* LayoutEngineTests.swift in Sources */,
 				00000000000000000000005A /* RegionLayoutsTests.swift in Sources */,
 			);

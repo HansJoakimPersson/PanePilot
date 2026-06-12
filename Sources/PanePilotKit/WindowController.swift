@@ -49,13 +49,13 @@ struct FocusedWindowSnapshot {
 /// boxing/unboxing required for `CGPoint` and `CGSize` attributes, and the tree traversal
 /// needed to find the window ancestor of any arbitrary AX element.
 struct WindowController {
-    /// Returns a snapshot of the window being dragged, preferring the currently focused window.
+    /// Returns a snapshot of the window being dragged, preferring the window under the cursor.
     ///
-    /// Dragging can temporarily shift AX focus away from the target window, so the method
-    /// first tries `snapshotFocusedWindow()` and falls back to hit-testing the AX element
-    /// under the cursor if the focused window cannot be identified.
+    /// Electron applications can temporarily expose a stale or missing focused window while a
+    /// title-bar drag is active. Cursor hit-testing identifies the actual dragged window more
+    /// reliably, with the focused window retained as a fallback for sparse AX hierarchies.
     func snapshotWindowForDrag(at point: CGPoint) -> FocusedWindowSnapshot? {
-        snapshotFocusedWindow() ?? snapshotWindowUnderCursor(at: point)
+        snapshotWindowUnderCursor(at: point) ?? snapshotFocusedWindow()
     }
 
     // MARK: - Snapshot Capture
@@ -125,7 +125,7 @@ struct WindowController {
     /// Walks up the AX parent chain to find the nearest ancestor with role `AXWindow`.
     ///
     /// `maxDepth` limits traversal to avoid infinite loops on pathological AX hierarchies.
-    private func ancestorWindow(from element: AXUIElement, maxDepth: Int = 8) -> AXUIElement? {
+    private func ancestorWindow(from element: AXUIElement, maxDepth: Int = 16) -> AXUIElement? {
         var current: AXUIElement? = element
         var depth = 0
         while let node = current, depth < maxDepth {
