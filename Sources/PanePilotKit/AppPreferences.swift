@@ -8,7 +8,9 @@ import Foundation
 /// `UserDefaults.standard` immediately — there is no separate "save" step.
 enum AppPreferences {
     private static let snapModifierKey = "snapModifier"
+    private static let snapModifierEnabledKey = "snapModifierEnabled"
     private static let keyboardSnapShortcutKey = "keyboardSnapShortcut"
+    private static let keyboardSnapShortcutEnabledKey = "keyboardSnapShortcutEnabled"
     private static let debugLoggingEnabledKey = "debugLoggingEnabled"
 
     // MARK: - Drag Snap
@@ -16,9 +18,14 @@ enum AppPreferences {
     /// The keyboard modifier combination the user must hold while dragging to activate snap.
     ///
     /// Defaults to Command on first launch. Legacy single-modifier raw values are still
-    /// accepted so older user preferences migrate without a separate migration step.
-    static var snapModifier: DragSnapModifier {
+    /// accepted so older user preferences migrate without a separate migration step. A `nil`
+    /// value means Drag Snap is disabled until the user records a modifier again.
+    static var snapModifier: DragSnapModifier? {
         get {
+            if UserDefaults.standard.object(forKey: snapModifierEnabledKey) != nil,
+               !UserDefaults.standard.bool(forKey: snapModifierEnabledKey) {
+                return nil
+            }
             guard let raw = UserDefaults.standard.string(forKey: snapModifierKey),
                   let modifier = DragSnapModifier(rawValue: raw) else {
                 return .defaultModifier
@@ -26,16 +33,25 @@ enum AppPreferences {
             return modifier
         }
         set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: snapModifierKey)
+            if let newValue {
+                UserDefaults.standard.set(newValue.rawValue, forKey: snapModifierKey)
+                UserDefaults.standard.set(true, forKey: snapModifierEnabledKey)
+            } else {
+                UserDefaults.standard.set(false, forKey: snapModifierEnabledKey)
+            }
         }
     }
 
     /// The complete hotkey that opens keyboard snap mode without dragging.
     ///
-    /// Defaults to Command + 1. Stored independently from the drag snap modifier
+    /// Defaults to Option + Escape. Stored independently from the drag snap modifier
     /// so users can avoid conflicts in either workflow without coupling the two settings.
-    static var keyboardSnapShortcut: KeyboardSnapShortcut {
+    static var keyboardSnapShortcut: KeyboardSnapShortcut? {
         get {
+            if UserDefaults.standard.object(forKey: keyboardSnapShortcutEnabledKey) != nil,
+               !UserDefaults.standard.bool(forKey: keyboardSnapShortcutEnabledKey) {
+                return nil
+            }
             guard let raw = UserDefaults.standard.string(forKey: keyboardSnapShortcutKey),
                   let shortcut = KeyboardSnapShortcut(rawValue: raw) else {
                 return .defaultShortcut
@@ -43,7 +59,12 @@ enum AppPreferences {
             return shortcut
         }
         set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: keyboardSnapShortcutKey)
+            if let newValue {
+                UserDefaults.standard.set(newValue.rawValue, forKey: keyboardSnapShortcutKey)
+                UserDefaults.standard.set(true, forKey: keyboardSnapShortcutEnabledKey)
+            } else {
+                UserDefaults.standard.set(false, forKey: keyboardSnapShortcutEnabledKey)
+            }
         }
     }
 

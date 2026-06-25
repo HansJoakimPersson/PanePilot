@@ -1,88 +1,174 @@
-<img src="Sources/PanePilot/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="180" alt="PanePilot icon" align="left"/>
+# PanePilot
 
-<div>
-<h3>PanePilot</h3>
-<p>A macOS menu bar utility for snapping windows into practical layouts. Hold a modifier while dragging a window and PanePilot shows a layout picker at the top of the screen — hover any zone to preview it, then release to snap. You can also snap without touching the mouse using the keyboard shortcut.</p>
-</div>
+<p>
+  <a href="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/ci.yml"><img src="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg?style=flat" alt="license"/></a>
+  <a href="https://github.com/HansJoakimPersson/PanePilot"><img src="https://img.shields.io/badge/platform-macOS-0A84FF.svg?style=flat" alt="platform"/></a>
+  <a href="https://github.com/HansJoakimPersson/PanePilot"><img src="https://img.shields.io/badge/Swift-6%20toolchain-F05138.svg?style=flat&logo=swift&logoColor=white" alt="Swift 6 toolchain"/></a>
+  <a href="https://github.com/sponsors/hansjoakimpersson"><img src="https://img.shields.io/badge/GitHub%20Sponsors-Support-EA4AAA.svg?style=flat&logo=githubsponsors&logoColor=ffffff" alt="GitHub Sponsors"/></a>
+</p>
 
-<br/><br/>
+PanePilot is a macOS menu bar utility for snapping windows into visual layouts. Hold your chosen drag modifier to open a compact layout picker, hover a zone to preview the result, and release to place the window. You can also use Keyboard Snap to choose a layout and zone with number keys.
 
-<div align="center">
-<a href="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/ci.yml"><img src="https://github.com/HansJoakimPersson/PanePilot/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-<a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg?style=flat" alt="license"/></a>
-<a href="https://github.com/HansJoakimPersson/PanePilot"><img src="https://img.shields.io/badge/platform-macOS-0A84FF.svg?style=flat" alt="platform"/></a>
-<a href="https://github.com/HansJoakimPersson/PanePilot"><img src="https://img.shields.io/badge/Swift-6%20toolchain-F05138.svg?style=flat&logo=swift&logoColor=white" alt="Swift 6 toolchain"/></a>
-<a href="https://buymeacoffee.com/hansjoakimpersson"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-Support-FFDD00.svg?style=flat&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee"/></a>
-</div>
+![PanePilot icon](docs/assets/panepilot-icon.svg)
 
-<br/>
+## System Requirements
 
-## Download
+PanePilot supports macOS 13 or later.
 
-Download the latest release here:
+Accessibility permission is required. PanePilot uses the public macOS Accessibility APIs to identify, move, and resize windows. Keyboard Snap also uses a CoreGraphics event tap so its trigger, layout digits, zone digits, and Escape handling do not leak into the active app while snap mode is active.
+
+## Installation
+
+Download the latest release archive:
 
 - [PanePilot-latest-macOS.zip](https://github.com/HansJoakimPersson/PanePilot/releases/latest/download/PanePilot-latest-macOS.zip)
 - [Project website](https://hansjoakimpersson.github.io/PanePilot/)
+- [Releases page](https://github.com/HansJoakimPersson/PanePilot/releases/latest)
 
-Releases are published through GitHub. Public notarized downloads and an App Store submission path are not set up yet.
+Then:
 
-## Major features
+1. Unzip the archive.
+2. Move `PanePilot.app` to `/Applications`.
+3. Launch PanePilot.
+4. Grant Accessibility access in `System Settings` > `Privacy & Security` > `Accessibility`.
+5. Open `Settings...` from the menu bar icon to choose shortcuts and manage layouts.
 
-- Runs from the macOS menu bar.
-- **Snap picker popup** — hold the configured modifier while dragging and a thumbnail row appears at the top of the screen showing all available layouts. Hover any zone to see a full-screen preview, then release to snap.
-- **Keyboard snap** — press the configured keyboard snap hotkey (default: `Command + 1`) to open the picker, then type the layout number followed by the zone number (e.g. `1` then `2` for layout 1, zone 2).
-- **Numbered zones** — every zone displays its number in the picker thumbnail and in the full-screen preview so keyboard navigation is always visible.
-- Includes built-in `40 / 60`, `60 / 40`, mirrored widescreen layouts, and multi-column layouts inspired by Amethyst.
-- Exposes Start at Login for signed app bundles.
-- Includes debug logging when you need to inspect permissions or window movement failures.
+Pre-release note: public notarized downloads and an App Store submission path are not set up yet.
 
-## How to install and use the app
+## How to Use It
 
-1. Download the latest release archive.
-2. Move `PanePilot.app` to the `Applications` folder.
-3. Launch `PanePilot`.
-4. Grant Accessibility access in `System Settings` > `Privacy & Security`.
-5. Open `Settings…` to choose the drag modifier and keyboard snap hotkey.
+### Drag Snap
 
-**Drag to snap:**
-1. Hold the configured modifier and start dragging a window.
-2. A layout picker appears at the top of the screen with all available layouts as numbered thumbnails.
-3. Hover any zone — a full-screen preview highlights where the window will land.
-4. Release the mouse button to snap.
+1. Hold the configured Drag Modifier while dragging a window.
+2. PanePilot shows a numbered layout picker at the top of the current display.
+3. Hover a zone to preview the final window frame.
+4. Release the mouse button to snap the window.
 
-**Keyboard snap (no drag required):**
-1. Press the configured keyboard snap hotkey.
-2. The picker appears over the frontmost window.
-3. Press the layout number (shown in the top-left badge of each thumbnail).
-4. Press the zone number (shown centred in each zone).
-5. Press Escape while choosing a zone to return to layout selection; press Escape from layout selection to cancel.
-6. The window snaps and the picker closes.
+The default Drag Modifier is `Command`. You can record a different modifier combination in Settings, or clear the value to disable Drag Snap until a new modifier is recorded.
 
-PanePilot uses the macOS Accessibility APIs to detect the active window, inspect its current frame, and move or resize it when a snap is confirmed.
+### Keyboard Snap
 
-### macOS compatibility
+1. Press the configured Keyboard Snap shortcut.
+2. Press a layout number.
+3. Press a zone number.
+4. Press `Escape` while choosing a zone to return to layout selection.
+5. Press `Escape` while choosing a layout to cancel.
 
-| PanePilot version | macOS version |
-| ----------------- | ------------- |
-| current           | 13 or newer   |
+The default Keyboard Snap shortcut is `Option + Escape`. You can record a different shortcut in Settings, or clear the value to disable Keyboard Snap until a new shortcut is recorded.
 
-## Current limits
+### Layouts
 
-- Target platform: macOS 13 or newer.
-- Accessibility permission is required before snapping works.
-- Some apps enforce minimum window sizes, so PanePilot may need to correct the final frame after a snap attempt.
-- Keyboard snap uses an Accessibility event tap to consume its trigger, layout/zone digits, and Escape before they reach the frontmost app. If the event tap cannot be created, Keyboard snap remains unavailable instead of leaking those keys.
-- Start at Login is only available when PanePilot is running from a signed `.app` bundle.
-- Public notarized distribution and an App Store submission path are not set up yet.
+PanePilot includes built-in layouts such as `40 / 60`, `60 / 40`, mirrored widescreen layouts, and multi-column layouts inspired by Amethyst.
 
-## How to build
+In Settings, you can:
 
-### Requirements
+- Create custom layouts.
+- Split, resize, merge, and rename zones.
+- Reorder layouts with drag and drop.
+- Hide layouts from the picker without deleting them.
+
+## Common Known Issues
+
+### PanePilot does nothing after launch
+
+Check Accessibility access:
+
+1. Open `System Settings` > `Privacy & Security` > `Accessibility`.
+2. Enable PanePilot.
+3. Quit and relaunch PanePilot if events still are not received.
+
+After rebuilding or changing signing identity, macOS can keep a stale Accessibility entry. Remove the old PanePilot entry from Accessibility, launch the app again, and grant access again.
+
+### Picker does not appear while dragging
+
+Try these checks first:
+
+1. Confirm Accessibility is enabled.
+2. Confirm the configured Drag Modifier is set and held down.
+3. Start dragging from the window title bar.
+4. Move the window far enough to pass the drag threshold.
+5. Check whether the target app exposes a normal, movable window through Accessibility.
+
+### Keyboard Snap does not start
+
+Try these checks first:
+
+1. Confirm Keyboard Snap has a recorded shortcut in Settings.
+2. Try a shortcut that is not already claimed by macOS or another app.
+3. Confirm Accessibility is enabled.
+4. Check the log for `unable to create an Accessibility event tap`.
+
+If the event tap cannot be created, Keyboard Snap fails closed and does not start.
+
+### A specific app snaps inconsistently
+
+Some apps enforce minimum window sizes or custom resize rules. Electron apps can also expose different Accessibility behavior across windows and app versions. Test the same layout with TextEdit or Finder to separate PanePilot issues from app-specific window behavior.
+
+## View Debug Logging
+
+Open `Settings...` > `Debug` and use `Open Log`.
+
+The log is stored at:
+
+```text
+~/Library/Logs/PanePilot/PanePilot.log
+```
+
+You can also inspect it from Terminal:
+
+```bash
+tail -n 200 "$HOME/Library/Logs/PanePilot/PanePilot.log"
+```
+
+Do not paste window titles, full file paths, or other personal activity data into public issues without reviewing the log first.
+
+## Preferences Storage
+
+PanePilot stores small preferences in `UserDefaults` under the app bundle identifier:
+
+```text
+com.panepilot.app
+```
+
+Custom layouts and layout catalog metadata are stored in:
+
+```text
+~/Library/Application Support/PanePilot/
+```
+
+Debug logs are stored in:
+
+```text
+~/Library/Logs/PanePilot/
+```
+
+## Uninstallation
+
+Quit PanePilot and move `PanePilot.app` to the Trash.
+
+To remove stored preferences:
+
+```bash
+defaults delete com.panepilot.app
+```
+
+To remove custom layouts, delete:
+
+```text
+~/Library/Application Support/PanePilot/
+```
+
+Back up that folder first if you want to keep custom layouts.
+
+## Running the App in Xcode (for developers)
+
+Requirements:
 
 - Xcode command line tools
-- A Swift 6 toolchain with SwiftPM tools support for 6.1
+- Swift 6 toolchain with SwiftPM tools support for 6.1
 
-### Build steps
+Useful commands:
 
 ```bash
 swift build
@@ -91,13 +177,39 @@ make app
 make run
 ```
 
-You can also open `PanePilot.xcodeproj` in Xcode for app target management, signing, entitlements, and archive/export work.
+You can also open `PanePilot.xcodeproj` in Xcode for app target management, signing, entitlements, archive, and export work.
+
+If a local agent or CI sandbox blocks SwiftPM cache access, use project-local caches:
+
+```bash
+mkdir -p .cache/clang .cache/swiftpm
+CLANG_MODULE_CACHE_PATH="$PWD/.cache/clang" \
+SWIFTPM_MODULECACHE_OVERRIDE="$PWD/.cache/swiftpm" \
+swift test --disable-sandbox
+```
+
+## Contributing
+
+PanePilot is still pre-release. Issues and focused pull requests are welcome, especially around:
+
+- Window compatibility reports with specific apps.
+- Keyboard Snap regressions.
+- Accessibility and event tap behavior.
+- Layout editor and picker usability.
+- Distribution, signing, and packaging improvements.
+
+Before opening a pull request, run:
+
+```bash
+swift test
+xcodebuild -scheme PanePilot -configuration Debug -destination 'platform=macOS' build
+```
 
 ## Support
 
-If you want to support PanePilot or whatever I end up building next, you can do that here:
+If you want to support PanePilot or whatever I build next:
 
-- [Buy Me a Coffee](https://buymeacoffee.com/hansjoakimpersson)
+- [GitHub Sponsors](https://github.com/sponsors/hansjoakimpersson)
 
 ## License
 

@@ -3,8 +3,8 @@ import Foundation
 
 struct KeyboardSnapShortcut: Equatable {
     static let defaultShortcut = KeyboardSnapShortcut(
-        modifiers: [.command],
-        keyCode: 18
+        modifiers: [.option],
+        keyCode: 53
     )
 
     static let modifierMask: NSEvent.ModifierFlags = [.control, .option, .command, .shift]
