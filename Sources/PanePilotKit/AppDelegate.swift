@@ -19,6 +19,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var displayLayoutStore: DisplayLayoutStore?
     /// Polls every second after the Accessibility prompt until the user grants permission.
     private var accessibilityPollTimer: Timer?
+    private var accessibilityStatusObserver: Any?
 
     public override init() {}
 
@@ -44,7 +45,39 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         NSApp.applicationIconImage = AppIconProvider.applicationIconImage()
         DebugLogger.shared.info("PanePilot app launched.")
+        observeAccessibilityChanges()
         promptForAccessibilityIfNeeded()
+    }
+
+    /// Listens for macOS accessibility permission changes and stops or restarts the drag
+    /// controller immediately — without waiting for a poll tick or Settings to be open.
+    private func observeAccessibilityChanges() {
+        accessibilityStatusObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.accessibility.api"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleAccessibilityStatusChanged() }
+        }
+    }
+
+    private func handleAccessibilityStatusChanged() {
+        // The com.apple.accessibility.api notification fires before AXIsProcessTrustedWithOptions
+        // reflects the new state, so check after a short delay.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            guard let self else { return }
+            let enabled = PermissionManager().ensureAccessibilityPermission(prompt: false)
+            if enabled {
+                DebugLogger.shared.info("Accessibility granted — restarting event monitors.")
+                dragSnapController?.restart()
+                accessibilityPollTimer?.invalidate()
+                accessibilityPollTimer = nil
+            } else {
+                DebugLogger.shared.info("Accessibility revoked — stopping event monitors.")
+                dragSnapController?.stop()
+            }
+        }
     }
 
     /// Shows the macOS Accessibility permission alert if the app is not yet trusted.
@@ -68,14 +101,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// an already-trusted process. Without this restart, events received before the permission
     /// grant are silently dropped by the system.
     private func startPollingForAccessibility() {
-        // Ignore the `timer` parameter to avoid a Sendable violation — `Timer` is not
-        // `Sendable`, so it cannot cross the actor boundary into `assumeIsolated`.
-        // Instead we invalidate via `self.accessibilityPollTimer`, which is safe because
-        // both the reference and the mutation happen on the main actor.
         accessibilityPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            // The timer fires on the main run loop, so it is safe to assert main-actor
-            // isolation here without scheduling an async hop.
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard PermissionManager().ensureAccessibilityPermission(prompt: false) else { return }
                 self.accessibilityPollTimer?.invalidate()

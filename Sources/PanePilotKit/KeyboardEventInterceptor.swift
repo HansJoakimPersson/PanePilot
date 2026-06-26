@@ -30,6 +30,7 @@ final class KeyboardEventInterceptor {
             callback: Self.eventTapCallback,
             userInfo: userInfo
         ) else {
+            DebugLogger.shared.error("KeyboardEventInterceptor: unable to create event tap — accessibility permission may be missing.")
             keyDownHandler = nil
             return false
         }
@@ -40,10 +41,12 @@ final class KeyboardEventInterceptor {
 
         self.eventTap = eventTap
         runLoopSource = source
+        DebugLogger.shared.info("KeyboardEventInterceptor: event tap started.")
         return true
     }
 
     func stop() {
+        guard eventTap != nil || runLoopSource != nil else { return }
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
@@ -56,13 +59,21 @@ final class KeyboardEventInterceptor {
         eventTap = nil
         keyDownHandler = nil
         suppressedKeyCodes.removeAll()
+        DebugLogger.shared.info("KeyboardEventInterceptor: event tap stopped.")
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let eventTap {
-                CGEvent.tapEnable(tap: eventTap, enable: true)
-            }
+        if type == .tapDisabledByTimeout {
+            DebugLogger.shared.error("KeyboardEventInterceptor: tap disabled by timeout — re-enabling.")
+            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+            return Unmanaged.passUnretained(event)
+        }
+        if type == .tapDisabledByUserInput {
+            // Accessibility was revoked. AppDelegate's distributed notification observer
+            // handles the primary stop; this is a safety net in case the notification
+            // fires after an event is already in flight.
+            DebugLogger.shared.error("KeyboardEventInterceptor: tap disabled by user (accessibility revoked) — stopping.")
+            Task { @MainActor [weak self] in self?.stop() }
             return Unmanaged.passUnretained(event)
         }
 

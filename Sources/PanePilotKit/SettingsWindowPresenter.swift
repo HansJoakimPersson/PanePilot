@@ -102,6 +102,10 @@ public final class SettingsWindowPresenter {
                 AppPreferences.keyboardSnapShortcut = shortcut
                 self?.dragSnapController?.setKeyboardSnapShortcut(shortcut)
             },
+            onAccessibilityGranted: { [weak self] in
+                DebugLogger.shared.info("SettingsWindowPresenter: Accessibility granted from Settings; restarting snap controller.")
+                self?.dragSnapController?.restart()
+            },
             onDebugLoggingChanged: { enabled in
                 DebugLogger.shared.setEnabled(enabled)
             }
