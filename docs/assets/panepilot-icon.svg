@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">PanePilot icon</title>
+  <desc id="desc">A rounded blue square with three light vertical window panes.</desc>
+  <defs>
+    <linearGradient id="app-fill" x1="128" y1="0" x2="128" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0086db"/>
+      <stop offset="0.55" stop-color="#0078cc"/>
+      <stop offset="1" stop-color="#0068bd"/>
+    </linearGradient>
+    <linearGradient id="pane-fill" x1="128" y1="46" x2="128" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7fbfd"/>
+      <stop offset="0.1" stop-color="#f2f9fd"/>
+      <stop offset="1" stop-color="#f2f8fc"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="48" fill="url(#app-fill)"/>
+  <g>
+    <rect x="34" y="47" width="60" height="166" rx="9" fill="#005fa8" opacity="0.2"/>
+    <rect x="34" y="45" width="60" height="166" rx="9" fill="#6bb0e1" opacity="0.76"/>
+    <rect x="36" y="46" width="56" height="164" rx="7" fill="url(#pane-fill)"/>
+    <rect x="36.75" y="46.75" width="54.5" height="162.5" rx="6.25" fill="none" stroke="#ffffff" stroke-opacity="0.68" stroke-width="1.5"/>
+
+    <rect x="98" y="47" width="60" height="166" rx="9" fill="#005fa8" opacity="0.2"/>
+    <rect x="98" y="45" width="60" height="166" rx="9" fill="#6bb0e1" opacity="0.76"/>
+    <rect x="100" y="46" width="56" height="164" rx="7" fill="url(#pane-fill)"/>
+    <rect x="100.75" y="46.75" width="54.5" height="162.5" rx="6.25" fill="none" stroke="#ffffff" stroke-opacity="0.68" stroke-width="1.5"/>
+
+    <rect x="162" y="47" width="60" height="166" rx="9" fill="#005fa8" opacity="0.2"/>
+    <rect x="162" y="45" width="60" height="166" rx="9" fill="#6bb0e1" opacity="0.76"/>
+    <rect x="164" y="46" width="56" height="164" rx="7" fill="url(#pane-fill)"/>
+    <rect x="164.75" y="46.75" width="54.5" height="162.5" rx="6.25" fill="none" stroke="#ffffff" stroke-opacity="0.68" stroke-width="1.5"/>
+  </g>
+</svg>
