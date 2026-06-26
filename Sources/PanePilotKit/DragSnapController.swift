@@ -160,8 +160,8 @@ final class DragSnapController {
     private let displayLayoutStore: DisplayLayoutStore
     private let selfPID = ProcessInfo.processInfo.processIdentifier
     private var requiresModifierKey = true
-    private var requiredModifier: DragSnapModifier = .defaultModifier
-    private var keyboardSnapShortcut: KeyboardSnapShortcut = .defaultShortcut
+    private var requiredModifier: DragSnapModifier? = .defaultModifier
+    private var keyboardSnapShortcut: KeyboardSnapShortcut?
 
     init(
         permissions: PermissionManager,
@@ -237,19 +237,19 @@ final class DragSnapController {
 
     func setRequiresModifierKey(_ required: Bool) {
         requiresModifierKey = required
-        logger.info("Modifier requirement \(required ? "enabled (hold \(requiredModifier.displayName))" : "disabled")")
+        logger.info("Modifier requirement \(required ? "enabled (hold \(requiredModifier?.displayName ?? "none"))" : "disabled")")
         if required, !isModifierActive() { resetPicker() }
     }
 
-    func setRequiredModifier(_ modifier: DragSnapModifier) {
+    func setRequiredModifier(_ modifier: DragSnapModifier?) {
         requiredModifier = modifier
-        logger.info("Snap modifier changed to \(modifier.displayName)")
+        logger.info("Snap modifier changed to \(modifier?.displayName ?? "none")")
         if requiresModifierKey, !isModifierActive() { resetPicker() }
     }
 
-    func setKeyboardSnapShortcut(_ shortcut: KeyboardSnapShortcut) {
+    func setKeyboardSnapShortcut(_ shortcut: KeyboardSnapShortcut?) {
         keyboardSnapShortcut = shortcut
-        logger.info("Keyboard snap shortcut changed to \(shortcut.displayName)")
+        logger.info("Keyboard snap shortcut changed to \(shortcut?.displayName ?? "none")")
     }
 
     // MARK: - Mouse Event Handling
@@ -295,18 +295,20 @@ final class DragSnapController {
         let distance = hypot(location.x - down.x, location.y - down.y)
         guard distance >= 16 else { return }
 
-        guard let currentSnapshot = windowController.snapshotWindowForDrag(at: location) else { return }
-        guard shouldConsiderWindow(currentSnapshot) else { return }
-        guard isSameWindow(initialSnapshot, currentSnapshot) else { return }
+        if !dragWindowConfirmed {
+            guard let currentSnapshot = windowController.snapshotWindowForDrag(at: location) else { return }
+            guard shouldConsiderWindow(currentSnapshot) else { return }
+            guard isSameWindow(initialSnapshot, currentSnapshot) else { return }
 
-        // The user may click a title bar without dragging. Only show the picker after
-        // the tracked window frame actually starts moving.
-        let movedDistance = hypot(
-            currentSnapshot.frame.origin.x - initialSnapshot.frame.origin.x,
-            currentSnapshot.frame.origin.y - initialSnapshot.frame.origin.y
-        )
-        guard movedDistance >= 4 else { return }
-        dragWindowConfirmed = true
+            // The user may click a title bar without dragging. Only show the picker after
+            // the tracked window frame actually starts moving.
+            let movedDistance = hypot(
+                currentSnapshot.frame.origin.x - initialSnapshot.frame.origin.x,
+                currentSnapshot.frame.origin.y - initialSnapshot.frame.origin.y
+            )
+            guard movedDistance >= 4 else { return }
+            dragWindowConfirmed = true
+        }
 
         guard let screen = screen(at: location) else { return }
 
@@ -381,6 +383,10 @@ final class DragSnapController {
         keyCode: UInt16,
         modifierFlags: NSEvent.ModifierFlags
     ) -> Bool {
+        guard let keyboardSnapShortcut else {
+            return false
+        }
+
         let router = KeyboardSnapEventRouter(shortcut: keyboardSnapShortcut)
         switch router.action(
             keyCode: keyCode,
@@ -461,10 +467,10 @@ final class DragSnapController {
             let layout = layouts[index]
             logger.info("Keyboard snap: layout \(digit) '\(layout.name)' selected, awaiting zone.")
 
-            // Preview first zone of the selected layout so the user gets visual feedback.
-            if let firstRegion = layout.regions.first, let screen = keyboardSnapScreen {
-                snapPickerController.setHoveredRegion(layoutID: layout.id, regionID: firstRegion.id)
-                previewOverlayController.show(screen: screen, layout: layout, highlightedRegionID: firstRegion.id)
+            // Highlight the full selected layout in the picker while awaiting a zone digit.
+            if let screen = keyboardSnapScreen {
+                snapPickerController.setHoveredRegion(layoutID: layout.id, regionID: nil)
+                previewOverlayController.show(screen: screen, layout: layout, highlightedRegionID: nil)
             }
 
         } else {
@@ -622,7 +628,9 @@ final class DragSnapController {
     }
 
     private func isModifierActive() -> Bool {
-        !requiresModifierKey || requiredModifier.matches(modifierFlags: NSEvent.modifierFlags)
+        guard requiresModifierKey else { return true }
+        guard let requiredModifier else { return false }
+        return requiredModifier.matches(modifierFlags: NSEvent.modifierFlags)
     }
 
     private func snapVisibleFrame(for screen: NSScreen) -> CGRect {

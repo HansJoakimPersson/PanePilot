@@ -22,7 +22,7 @@ import Foundation
 /// - `show(layouts:on:)` — creates or repositions the panel and populates thumbnails.
 /// - `hide()` — removes the panel from screen.
 /// - `hitTest(at:)` — converts a global screen point to a `(layout, region)` pair.
-/// - `setHoveredRegion(layoutID:regionID:)` — highlights a region in the matching thumbnail.
+/// - `setHoveredRegion(layoutID:regionID:)` — highlights a layout or region in the matching thumbnail.
 @MainActor
 final class SnapPickerWindowController {
     private var panel: NSPanel?
@@ -177,12 +177,15 @@ private final class SnapPickerView: NSView {
 
     func setHover(layoutID: String?, regionID: Int?) {
         for card in cards {
-            card.setHover(regionID: card.layout.id == layoutID ? regionID : nil)
+            card.setHover(
+                layoutSelected: card.layout.id == layoutID && regionID == nil,
+                regionID: card.layout.id == layoutID ? regionID : nil
+            )
         }
     }
 
     func clearHover() {
-        for card in cards { card.setHover(regionID: nil) }
+        for card in cards { card.setHover(layoutSelected: false, regionID: nil) }
     }
 
     // MARK: - Hit Testing
@@ -229,8 +232,8 @@ private final class LayoutCardView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func setHover(regionID: Int?) {
-        thumbnail.setHover(regionID: regionID)
+    func setHover(layoutSelected: Bool, regionID: Int?) {
+        thumbnail.setHover(layoutSelected: layoutSelected, regionID: regionID)
     }
 
     /// Returns the region ID under the given point (in this view's coordinate space), or nil.
@@ -246,6 +249,7 @@ private final class LayoutThumbnailView: NSView {
     private let layout: RegionLayout
     /// 1-based position of this layout in the picker row, shown as a keyboard-navigation badge.
     private let layoutIndex: Int
+    private var layoutSelected = false
     private var hoveredRegionID: Int?
 
     init(layout: RegionLayout, layoutIndex: Int, size: CGSize) {
@@ -262,8 +266,9 @@ private final class LayoutThumbnailView: NSView {
 
     override var isOpaque: Bool { false }
 
-    func setHover(regionID: Int?) {
-        guard hoveredRegionID != regionID else { return }
+    func setHover(layoutSelected: Bool, regionID: Int?) {
+        guard self.layoutSelected != layoutSelected || hoveredRegionID != regionID else { return }
+        self.layoutSelected = layoutSelected
         hoveredRegionID = regionID
         needsDisplay = true
     }
@@ -290,8 +295,9 @@ private final class LayoutThumbnailView: NSView {
             let rect = denormalized(region.normalizedFrame, in: bounds).insetBy(dx: 1, dy: 1)
             let path = NSBezierPath(roundedRect: rect, xRadius: 2.5, yRadius: 2.5)
             let isHovered = region.id == hoveredRegionID
+            let isActive = isHovered || layoutSelected
 
-            if isHovered {
+            if isActive {
                 NSColor.controlAccentColor.withAlphaComponent(0.55).setFill()
             } else {
                 NSColor.labelColor.withAlphaComponent(0.12).setFill()
@@ -306,7 +312,7 @@ private final class LayoutThumbnailView: NSView {
             let zoneFontSize = max(7, min(rect.height / 2.8, rect.width / 1.8, 16))
             let zoneAttrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: zoneFontSize, weight: .semibold),
-                .foregroundColor: isHovered
+                .foregroundColor: isActive
                     ? NSColor.white.withAlphaComponent(0.9)
                     : NSColor.labelColor.withAlphaComponent(0.45),
             ]
@@ -315,6 +321,13 @@ private final class LayoutThumbnailView: NSView {
                 at: CGPoint(x: rect.midX - zoneSize.width / 2, y: rect.midY - zoneSize.height / 2),
                 withAttributes: zoneAttrs
             )
+        }
+
+        if layoutSelected {
+            NSColor.controlAccentColor.withAlphaComponent(0.75).setStroke()
+            let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 4, yRadius: 4)
+            outline.lineWidth = 1.5
+            outline.stroke()
         }
 
         // Layout index badge — small rounded pill in the top-left corner.

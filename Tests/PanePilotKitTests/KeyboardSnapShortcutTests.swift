@@ -11,10 +11,10 @@ final class KeyboardSnapShortcutTests: XCTestCase {
         XCTAssertEqual(decoded, shortcut)
     }
 
-    func testDefaultShortcutIsCommandOne() {
-        XCTAssertEqual(KeyboardSnapShortcut.defaultShortcut.modifiers, [.command])
-        XCTAssertEqual(KeyboardSnapShortcut.defaultShortcut.keyCode, 18)
-        XCTAssertEqual(KeyboardSnapShortcut.defaultShortcut.displayName, "Command + 1")
+    func testDefaultShortcutIsOptionEscape() {
+        XCTAssertEqual(KeyboardSnapShortcut.defaultShortcut.modifiers, [.option])
+        XCTAssertEqual(KeyboardSnapShortcut.defaultShortcut.keyCode, 53)
+        XCTAssertEqual(KeyboardSnapShortcut.defaultShortcut.displayName, "Option + Escape")
     }
 
     func testShortcutMatchesExactModifierSet() {
@@ -25,10 +25,11 @@ final class KeyboardSnapShortcutTests: XCTestCase {
         XCTAssertFalse(shortcut.matches(keyCode: 53, modifierFlags: [.command]))
     }
 
-    func testShortcutWarnsForEscapeAndSingleOption() {
+    func testShortcutWarnsForEscapeAndSingleModifiers() {
         XCTAssertNotNil(KeyboardSnapShortcut(modifiers: [.control, .option], keyCode: 53).warningMessage)
         XCTAssertNotNil(KeyboardSnapShortcut(modifiers: [.option], keyCode: 49).warningMessage)
-        XCTAssertNil(KeyboardSnapShortcut.defaultShortcut.warningMessage)
+        XCTAssertNotNil(KeyboardSnapShortcut(modifiers: [.shift], keyCode: 18).warningMessage)
+        XCTAssertNil(KeyboardSnapShortcut(modifiers: [.control, .command], keyCode: 49).warningMessage)
     }
 
     func testDragSnapModifierRawValueRoundTripPreservesModifierCombination() throws {
