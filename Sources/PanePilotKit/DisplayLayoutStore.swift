@@ -26,13 +26,26 @@ struct DisplayRecord: Codable {
     var layoutID: String
 }
 
+/// User-controlled presentation metadata for one layout in the picker catalog.
+struct LayoutCatalogItem {
+    let layout: RegionLayout
+    let isVisible: Bool
+    let isBuiltIn: Bool
+}
+
+private struct PersistedLayoutCatalogEntry: Codable, Equatable {
+    let layoutID: String
+    var isVisible: Bool
+}
+
 /// The central store for layout definitions and per-display layout assignments.
 ///
 /// `DisplayLayoutStore` maintains two parallel collections:
 /// - **Layout catalog**: the full set of available `RegionLayout` values (built-ins + custom).
 /// - **Display registry**: `DisplayRecord` entries mapping physical displays to layouts.
 ///
-/// Both collections are persisted to JSON files under `~/Library/Application Support/PanePilot/`.
+/// Layout definitions, catalog metadata, and display records are persisted to separate JSON
+/// files under `~/Library/Application Support/PanePilot/`.
 /// On load, legacy layout IDs are migrated through `RegionLayouts.canonicalLayoutID(for:)`.
 ///
 /// All mutation methods must be called on the main actor. Read-only query methods
@@ -43,25 +56,31 @@ final class DisplayLayoutStore {
     // display state can evolve without rewriting the full set of available layouts.
     private let displayFileURL: URL
     private let layoutsFileURL: URL
+    private let catalogFileURL: URL
     private var recordsByID: [String: DisplayRecord] = [:]
     private var layoutsByID: [String: RegionLayout] = [:]
+    private var catalogEntries: [PersistedLayoutCatalogEntry] = []
     private let builtInLayoutIDs: Set<String>
 
     // MARK: - Initialization
 
-    init(layouts: [RegionLayout]) {
+    init(layouts: [RegionLayout], storageDirectory: URL? = nil) {
         self.builtInLayoutIDs = Set(layouts.map(\.id))
         let fm = FileManager.default
-        let appSupportDir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("PanePilot", isDirectory: true)
+        let appSupportDir = storageDirectory
+            ?? fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("PanePilot", isDirectory: true)
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
                 .appendingPathComponent("PanePilotAppSupport", isDirectory: true)
         try? fm.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
         self.displayFileURL = appSupportDir.appendingPathComponent("display-layouts.json")
         self.layoutsFileURL = appSupportDir.appendingPathComponent("layouts.json")
+        self.catalogFileURL = appSupportDir.appendingPathComponent("layout-catalog.json")
 
         self.layoutsByID = Dictionary(uniqueKeysWithValues: layouts.map { ($0.id, $0) })
         loadLayouts()
+        loadCatalog()
+        reconcileCatalog()
         load()
     }
 
@@ -121,32 +140,55 @@ final class DisplayLayoutStore {
 
     // MARK: - Layout Catalog
 
-    /// Returns all layouts (built-in + custom) sorted alphabetically by name.
+    /// Returns all layouts in the user's catalog order, including hidden layouts.
     func allLayouts() -> [RegionLayout] {
-        layoutsByID.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        catalogItems().map(\.layout)
+    }
+
+    func catalogItems() -> [LayoutCatalogItem] {
+        catalogEntries.compactMap { entry in
+            guard let layout = layoutsByID[entry.layoutID] else { return nil }
+            return LayoutCatalogItem(
+                layout: layout,
+                isVisible: entry.isVisible,
+                isBuiltIn: builtInLayoutIDs.contains(layout.id)
+            )
+        }
     }
 
     /// Returns all layouts in snap-picker display order.
     ///
-    /// Built-in layouts appear first in a fixed canonical order (matching the Settings table),
-    /// followed by user-created layouts sorted alphabetically. This is the order used by
-    /// `SnapPickerWindowController` when rendering the thumbnail row.
+    /// Hidden layouts remain editable in Settings but are omitted from the picker and keyboard
+    /// numbering. The remaining order is entirely user-controlled.
     func orderedLayouts() -> [RegionLayout] {
-        let builtInOrder = [
-            RegionLayouts.split60x40.id,
-            RegionLayouts.split40x60.id,
-            RegionLayouts.widescreenTall.id,
-            RegionLayouts.widescreenTallMirror.id,
-            RegionLayouts.column.id,
-            RegionLayouts.threeColumnMiddle.id,
-        ]
-        let all = layoutsByID
-        let builtIns = builtInOrder.compactMap { all[$0] }
-        let builtInIDs = Set(builtInOrder)
-        let custom = all.values
-            .filter { !builtInIDs.contains($0.id) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        return builtIns + custom
+        catalogItems().filter(\.isVisible).map(\.layout)
+    }
+
+    @discardableResult
+    func setVisible(_ visible: Bool, for layoutID: String) -> Bool {
+        guard let index = catalogEntries.firstIndex(where: { $0.layoutID == layoutID }) else { return false }
+        guard catalogEntries[index].isVisible != visible else { return true }
+        if !visible {
+            let visibleCount = catalogEntries.lazy.filter(\.isVisible).count
+            guard visibleCount > 1 else { return false }
+        }
+        catalogEntries[index].isVisible = visible
+        persistCatalog()
+        return true
+    }
+
+    @discardableResult
+    func moveLayout(id layoutID: String, to insertionIndex: Int) -> Bool {
+        guard let sourceIndex = catalogEntries.firstIndex(where: { $0.layoutID == layoutID }) else { return false }
+        var destinationIndex = max(0, min(insertionIndex, catalogEntries.count))
+        if sourceIndex < destinationIndex {
+            destinationIndex -= 1
+        }
+        guard sourceIndex != destinationIndex else { return true }
+        let entry = catalogEntries.remove(at: sourceIndex)
+        catalogEntries.insert(entry, at: destinationIndex)
+        persistCatalog()
+        return true
     }
 
     func addColumnLayout(name: String, columns: Int) -> RegionLayout {
@@ -200,6 +242,8 @@ final class DisplayLayoutStore {
         guard !builtInLayoutIDs.contains(id) else { return false }
 
         layoutsByID.removeValue(forKey: id)
+        catalogEntries.removeAll { $0.layoutID == id }
+        ensureVisibleCatalogEntry()
         let fallbackID = defaultLayoutID
         for key in recordsByID.keys {
             guard var record = recordsByID[key] else { continue }
@@ -209,6 +253,7 @@ final class DisplayLayoutStore {
             }
         }
         persistLayouts()
+        persistCatalog()
         persist()
         return true
     }
@@ -327,70 +372,118 @@ final class DisplayLayoutStore {
         return saveLayout(layout)
     }
 
-    func resizeAdjacentRegions(layoutID: String, firstRegionID: Int, secondRegionID: Int, ratio: CGFloat) -> RegionLayout? {
-        guard isLayoutEditable(id: layoutID), var layout = layoutsByID[layoutID], firstRegionID != secondRegionID else { return nil }
-        guard let firstIndex = layout.regions.firstIndex(where: { $0.id == firstRegionID }),
-              let secondIndex = layout.regions.firstIndex(where: { $0.id == secondRegionID }) else { return nil }
+    func resizeAdjacentRegions(
+        layoutID: String,
+        firstRegionID: Int,
+        secondRegionID: Int,
+        ratio: CGFloat,
+        persistChanges: Bool = true
+    ) -> RegionLayout? {
+        guard let layout = layoutsByID[layoutID],
+              let first = layout.regions.first(where: { $0.id == firstRegionID }),
+              let second = layout.regions.first(where: { $0.id == secondRegionID }) else { return nil }
 
-        let first = layout.regions[firstIndex]
-        let second = layout.regions[secondIndex]
         let epsilon: CGFloat = 0.001
+
+        let touchingHorizontally = abs(first.normalizedFrame.maxX - second.normalizedFrame.minX) < epsilon
+            || abs(second.normalizedFrame.maxX - first.normalizedFrame.minX) < epsilon
+        if touchingHorizontally {
+            let firstIsLeft = first.normalizedFrame.minX < second.normalizedFrame.minX
+            return resizeAdjacentRegionGroups(
+                layoutID: layoutID,
+                firstRegionIDs: [firstIsLeft ? firstRegionID : secondRegionID],
+                secondRegionIDs: [firstIsLeft ? secondRegionID : firstRegionID],
+                axis: .vertical,
+                ratio: firstIsLeft ? ratio : 1 - ratio,
+                persistChanges: persistChanges
+            )
+        }
+
+        let touchingVertically = abs(first.normalizedFrame.maxY - second.normalizedFrame.minY) < epsilon
+            || abs(second.normalizedFrame.maxY - first.normalizedFrame.minY) < epsilon
+        guard touchingVertically else { return nil }
+        let firstIsBottom = first.normalizedFrame.minY < second.normalizedFrame.minY
+        return resizeAdjacentRegionGroups(
+            layoutID: layoutID,
+            firstRegionIDs: [firstIsBottom ? firstRegionID : secondRegionID],
+            secondRegionIDs: [firstIsBottom ? secondRegionID : firstRegionID],
+            axis: .horizontal,
+            ratio: firstIsBottom ? ratio : 1 - ratio,
+            persistChanges: persistChanges
+        )
+    }
+
+    func resizeAdjacentRegionGroups(
+        layoutID: String,
+        firstRegionIDs: [Int],
+        secondRegionIDs: [Int],
+        axis: SplitAxis,
+        ratio: CGFloat,
+        persistChanges: Bool = true
+    ) -> RegionLayout? {
+        guard isLayoutEditable(id: layoutID), var layout = layoutsByID[layoutID] else { return nil }
+        let firstIDs = Set(firstRegionIDs)
+        let secondIDs = Set(secondRegionIDs)
+        guard !firstIDs.isEmpty, !secondIDs.isEmpty, firstIDs.isDisjoint(with: secondIDs) else { return nil }
         let clampedRatio = max(0.05, min(0.95, ratio))
+        var regions = layout.regions
+        let firstRegions = regions.filter { firstIDs.contains($0.id) }
+        let secondRegions = regions.filter { secondIDs.contains($0.id) }
+        guard firstRegions.count == firstIDs.count, secondRegions.count == secondIDs.count else { return nil }
 
-        var firstFrame = first.normalizedFrame
-        var secondFrame = second.normalizedFrame
+        switch axis {
+        case .vertical:
+            let unionMinX = (firstRegions + secondRegions).map(\.normalizedFrame.minX).min() ?? 0
+            let unionMaxX = (firstRegions + secondRegions).map(\.normalizedFrame.maxX).max() ?? 1
+            let newX = unionMinX + ((unionMaxX - unionMinX) * clampedRatio)
+            guard newX - unionMinX > 0.005, unionMaxX - newX > 0.005 else { return nil }
 
-        let sameMinY = abs(firstFrame.minY - secondFrame.minY) < epsilon
-        let sameHeight = abs(firstFrame.height - secondFrame.height) < epsilon
-        let touchingHorizontally = abs(firstFrame.maxX - secondFrame.minX) < epsilon || abs(secondFrame.maxX - firstFrame.minX) < epsilon
-        if sameMinY && sameHeight && touchingHorizontally {
-            let unionMinX = min(firstFrame.minX, secondFrame.minX)
-            let unionMaxX = max(firstFrame.maxX, secondFrame.maxX)
-            let unionWidth = unionMaxX - unionMinX
-            let leftIsFirst = firstFrame.minX < secondFrame.minX
-            let leftWidth = unionWidth * (leftIsFirst ? clampedRatio : (1 - clampedRatio))
-            let rightWidth = unionWidth - leftWidth
-            guard leftWidth > 0.005, rightWidth > 0.005 else { return nil }
-
-            let leftFrame = CGRect(x: unionMinX, y: firstFrame.minY, width: leftWidth, height: firstFrame.height)
-            let rightFrame = CGRect(x: unionMinX + leftWidth, y: firstFrame.minY, width: rightWidth, height: firstFrame.height)
-            if leftIsFirst {
-                firstFrame = leftFrame
-                secondFrame = rightFrame
-            } else {
-                firstFrame = rightFrame
-                secondFrame = leftFrame
+            for index in regions.indices {
+                let region = regions[index]
+                var frame = region.normalizedFrame
+                if firstIDs.contains(region.id) {
+                    let width = newX - frame.minX
+                    guard width > 0.005 else { return nil }
+                    frame.size.width = width
+                } else if secondIDs.contains(region.id) {
+                    let maxX = frame.maxX
+                    let width = maxX - newX
+                    guard width > 0.005 else { return nil }
+                    frame.origin.x = newX
+                    frame.size.width = width
+                } else {
+                    continue
+                }
+                regions[index] = RegionLayout.Region(id: region.id, name: region.name, normalizedFrame: frame)
             }
-        } else {
-            let sameMinX = abs(firstFrame.minX - secondFrame.minX) < epsilon
-            let sameWidth = abs(firstFrame.width - secondFrame.width) < epsilon
-            let touchingVertically = abs(firstFrame.maxY - secondFrame.minY) < epsilon || abs(secondFrame.maxY - firstFrame.minY) < epsilon
-            guard sameMinX && sameWidth && touchingVertically else { return nil }
+        case .horizontal:
+            let unionMinY = (firstRegions + secondRegions).map(\.normalizedFrame.minY).min() ?? 0
+            let unionMaxY = (firstRegions + secondRegions).map(\.normalizedFrame.maxY).max() ?? 1
+            let newY = unionMinY + ((unionMaxY - unionMinY) * clampedRatio)
+            guard newY - unionMinY > 0.005, unionMaxY - newY > 0.005 else { return nil }
 
-            let unionMinY = min(firstFrame.minY, secondFrame.minY)
-            let unionMaxY = max(firstFrame.maxY, secondFrame.maxY)
-            let unionHeight = unionMaxY - unionMinY
-            let bottomIsFirst = firstFrame.minY < secondFrame.minY
-            let bottomHeight = unionHeight * (bottomIsFirst ? clampedRatio : (1 - clampedRatio))
-            let topHeight = unionHeight - bottomHeight
-            guard bottomHeight > 0.005, topHeight > 0.005 else { return nil }
-
-            let bottomFrame = CGRect(x: firstFrame.minX, y: unionMinY, width: firstFrame.width, height: bottomHeight)
-            let topFrame = CGRect(x: firstFrame.minX, y: unionMinY + bottomHeight, width: firstFrame.width, height: topHeight)
-            if bottomIsFirst {
-                firstFrame = bottomFrame
-                secondFrame = topFrame
-            } else {
-                firstFrame = topFrame
-                secondFrame = bottomFrame
+            for index in regions.indices {
+                let region = regions[index]
+                var frame = region.normalizedFrame
+                if firstIDs.contains(region.id) {
+                    let height = newY - frame.minY
+                    guard height > 0.005 else { return nil }
+                    frame.size.height = height
+                } else if secondIDs.contains(region.id) {
+                    let maxY = frame.maxY
+                    let height = maxY - newY
+                    guard height > 0.005 else { return nil }
+                    frame.origin.y = newY
+                    frame.size.height = height
+                } else {
+                    continue
+                }
+                regions[index] = RegionLayout.Region(id: region.id, name: region.name, normalizedFrame: frame)
             }
         }
 
-        var regions = layout.regions
-        regions[firstIndex] = RegionLayout.Region(id: first.id, name: first.name, normalizedFrame: firstFrame)
-        regions[secondIndex] = RegionLayout.Region(id: second.id, name: second.name, normalizedFrame: secondFrame)
         layout = RegionLayout(id: layout.id, name: layout.name, regions: regions)
-        return saveLayout(layout)
+        return saveLayout(layout, persistChanges: persistChanges)
     }
 
     func setEqualColumns(layoutID: String, columns: Int) -> RegionLayout? {
@@ -462,6 +555,58 @@ final class DisplayLayoutStore {
         layoutsByID.merge(custom, uniquingKeysWith: { _, persisted in persisted })
     }
 
+    private func loadCatalog() {
+        guard let data = try? Data(contentsOf: catalogFileURL),
+              let decoded = try? JSONDecoder().decode([PersistedLayoutCatalogEntry].self, from: data) else { return }
+        catalogEntries = decoded
+    }
+
+    private func reconcileCatalog() {
+        var seen = Set<String>()
+        var reconciled = catalogEntries.compactMap { entry -> PersistedLayoutCatalogEntry? in
+            let canonicalID = RegionLayouts.canonicalLayoutID(for: entry.layoutID)
+            guard layoutsByID[canonicalID] != nil, seen.insert(canonicalID).inserted else { return nil }
+            return PersistedLayoutCatalogEntry(
+                layoutID: canonicalID,
+                isVisible: entry.isVisible
+            )
+        }
+
+        for layoutID in defaultCatalogOrder where !seen.contains(layoutID) {
+            reconciled.append(PersistedLayoutCatalogEntry(layoutID: layoutID, isVisible: true))
+            seen.insert(layoutID)
+        }
+
+        let remainingIDs = layoutsByID.values
+            .filter { !seen.contains($0.id) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .map(\.id)
+        reconciled.append(contentsOf: remainingIDs.map {
+            PersistedLayoutCatalogEntry(layoutID: $0, isVisible: true)
+        })
+
+        catalogEntries = reconciled
+        ensureVisibleCatalogEntry()
+        persistCatalog()
+    }
+
+    private func ensureVisibleCatalogEntry() {
+        guard !catalogEntries.isEmpty, !catalogEntries.contains(where: \.isVisible) else { return }
+        catalogEntries[0].isVisible = true
+    }
+
+    private var defaultCatalogOrder: [String] {
+        let preferredBuiltIns = [
+            RegionLayouts.split60x40.id,
+            RegionLayouts.split40x60.id,
+            RegionLayouts.widescreenTall.id,
+            RegionLayouts.widescreenTallMirror.id,
+            RegionLayouts.column.id,
+            RegionLayouts.threeColumnMiddle.id,
+        ]
+        return preferredBuiltIns.filter { layoutsByID[$0] != nil }
+    }
+
     private func persistLayouts() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -470,12 +615,29 @@ final class DisplayLayoutStore {
         try? data.write(to: layoutsFileURL, options: .atomic)
     }
 
+    private func persistCatalog() {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(catalogEntries) else { return }
+        try? data.write(to: catalogFileURL, options: .atomic)
+    }
+
     // MARK: - Layout Utilities
 
     @discardableResult
-    private func saveLayout(_ layout: RegionLayout) -> RegionLayout {
+    private func saveLayout(_ layout: RegionLayout, persistChanges: Bool = true) -> RegionLayout {
         layoutsByID[layout.id] = layout
-        persistLayouts()
+        if !catalogEntries.contains(where: { $0.layoutID == layout.id }) {
+            catalogEntries.append(
+                PersistedLayoutCatalogEntry(layoutID: layout.id, isVisible: true)
+            )
+            if persistChanges {
+                persistCatalog()
+            }
+        }
+        if persistChanges {
+            persistLayouts()
+        }
         return layout
     }
 

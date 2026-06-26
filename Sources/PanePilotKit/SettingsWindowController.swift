@@ -7,46 +7,185 @@ import Foundation
 /// window does not resize when the user switches tabs.
 private let settingsWindowContentSize = NSSize(width: 450, height: 300)
 private let settingsVisibleTableRows = 7
-private let settingsTableRowHeight: CGFloat = 22
-private let settingsTableHeaderHeight: CGFloat = 26
+private let settingsTableRowHeight: CGFloat = 30
+private let shortcutControlHeight: CGFloat = 24
+private let shortcutControlWidth: CGFloat = 180
+private let shortcutControlCornerRadius: CGFloat = 7
+private let shortcutClearWidth: CGFloat = 32
+private let layoutRowPasteboardType = NSPasteboard.PasteboardType("com.panepilot.layout-row")
+private let layoutOverlayControlAlpha: CGFloat = 0.72
+private let layoutOverlayBorderAlpha: CGFloat = 0.45
 
-/// Canonical display order for built-in layouts in the Layouts settings table.
-private let settingsBuiltInLayoutOrder = [
-    RegionLayouts.split40x60.id,
-    RegionLayouts.split60x40.id,
-    RegionLayouts.widescreenTall.id,
-    RegionLayouts.widescreenTallMirror.id,
-    RegionLayouts.column.id,
-    RegionLayouts.threeColumnMiddle.id,
-]
+@MainActor
+private func secondaryLabel(_ text: String = "") -> NSTextField {
+    let label = NSTextField(wrappingLabelWithString: text)
+    label.translatesAutoresizingMaskIntoConstraints = false
+    label.textColor = .secondaryLabelColor
+    label.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    return label
+}
 
-/// Returns `source` sorted for display in the Layouts table: built-ins first in canonical
-/// order, then user layouts sorted alphabetically.
-private func orderedSettingsLayouts(_ source: [RegionLayout]) -> [RegionLayout] {
-    let builtIns = settingsBuiltInLayoutOrder.compactMap { id in source.first(where: { $0.id == id }) }
-    let custom = source
-        .filter { !settingsBuiltInLayoutOrder.contains($0.id) }
-        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    return builtIns + custom
+@MainActor
+private func applyShortcutControlStyle(to view: NSView) {
+    view.wantsLayer = true
+    view.layer?.cornerRadius = shortcutControlCornerRadius
+    view.layer?.backgroundColor = NSColor(calibratedWhite: 0.91, alpha: 1).cgColor
+    view.layer?.borderWidth = 0
+}
+
+@MainActor
+private func applyShortcutRecorderStyle(to button: NSButton) {
+    button.bezelStyle = .regularSquare
+    button.isBordered = false
+    button.focusRingType = .none
+    button.alignment = .center
+    button.font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+    applyShortcutControlStyle(to: button)
+}
+
+@MainActor
+private final class ShortcutValuePill: NSView {
+    var onClear: (() -> Void)?
+
+    private let valueContainer = NSView()
+    private let label = NSTextField(labelWithString: "")
+    private let clearButton = NSButton()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configure()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setValue(_ value: String, clearAccessibilityLabel: String) {
+        label.stringValue = value
+        clearButton.setAccessibilityLabel(clearAccessibilityLabel)
+        clearButton.toolTip = clearAccessibilityLabel
+    }
+
+    private func configure() {
+        applyShortcutControlStyle(to: self)
+
+        valueContainer.translatesAutoresizingMaskIntoConstraints = false
+        valueContainer.wantsLayer = true
+        valueContainer.layer?.cornerRadius = shortcutControlCornerRadius
+        valueContainer.layer?.backgroundColor = NSColor(calibratedWhite: 0.84, alpha: 1).cgColor
+
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.alignment = .center
+        label.lineBreakMode = .byTruncatingMiddle
+        label.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        label.textColor = .labelColor
+
+        clearButton.translatesAutoresizingMaskIntoConstraints = false
+        clearButton.isBordered = false
+        clearButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Reset")
+        clearButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+        clearButton.contentTintColor = .secondaryLabelColor
+        clearButton.toolTip = "Reset to default"
+        clearButton.target = self
+        clearButton.action = #selector(clear)
+
+        addSubview(valueContainer)
+        valueContainer.addSubview(label)
+        addSubview(clearButton)
+
+        NSLayoutConstraint.activate([
+            valueContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
+            valueContainer.topAnchor.constraint(equalTo: topAnchor),
+            valueContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
+            valueContainer.trailingAnchor.constraint(equalTo: clearButton.leadingAnchor),
+
+            label.leadingAnchor.constraint(equalTo: valueContainer.leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: valueContainer.trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: valueContainer.centerYAnchor),
+
+            clearButton.trailingAnchor.constraint(equalTo: trailingAnchor),
+            clearButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            clearButton.widthAnchor.constraint(equalToConstant: shortcutClearWidth),
+            clearButton.heightAnchor.constraint(equalTo: heightAnchor),
+        ])
+    }
+
+    @objc
+    private func clear() {
+        onClear?()
+    }
+}
+
+@MainActor
+private final class CircularOverlayButton: NSButton {
+    private let symbol = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Remove Divider")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configure()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let diameter = min(bounds.width, bounds.height) - 2
+        let circleRect = NSRect(
+            x: bounds.midX - diameter / 2,
+            y: bounds.midY - diameter / 2,
+            width: diameter,
+            height: diameter
+        )
+
+        let circle = NSBezierPath(ovalIn: circleRect)
+        NSColor.windowBackgroundColor.withAlphaComponent(layoutOverlayControlAlpha).setFill()
+        circle.fill()
+        NSColor.systemRed.withAlphaComponent(0.72).setStroke()
+        circle.lineWidth = 1
+        circle.stroke()
+
+        guard let symbol else { return }
+        let iconSize = NSSize(width: 10, height: 10)
+        let iconRect = NSRect(
+            x: bounds.midX - iconSize.width / 2,
+            y: bounds.midY - iconSize.height / 2,
+            width: iconSize.width,
+            height: iconSize.height
+        )
+        symbol.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 0.72)
+    }
+
+    private func configure() {
+        bezelStyle = .regularSquare
+        isBordered = false
+        imagePosition = .imageOnly
+        alignment = .center
+        focusRingType = .none
+        wantsLayer = false
+        contentTintColor = .secondaryLabelColor
+    }
 }
 
 @MainActor
 private final class ShortcutRecorderButton: NSButton {
-    var shortcut: KeyboardSnapShortcut {
+    var shortcut: KeyboardSnapShortcut? {
         didSet {
             recording = false
             updateTitle()
             onShortcutChanged?(shortcut)
         }
     }
-    var onShortcutChanged: ((KeyboardSnapShortcut) -> Void)?
+    var onShortcutChanged: ((KeyboardSnapShortcut?) -> Void)?
 
     private var recording = false
 
-    init(shortcut: KeyboardSnapShortcut) {
+    init(shortcut: KeyboardSnapShortcut?) {
         self.shortcut = shortcut
         super.init(frame: .zero)
-        bezelStyle = .rounded
+        applyShortcutRecorderStyle(to: self)
         target = self
         action = #selector(startRecording)
         updateTitle()
@@ -89,29 +228,29 @@ private final class ShortcutRecorderButton: NSButton {
     }
 
     private func updateTitle() {
-        title = recording ? "Press shortcut..." : shortcut.displayName
+        title = recording ? "Press..." : "Record Shortcut"
     }
 }
 
 @MainActor
 private final class ModifierRecorderButton: NSButton {
-    var modifier: DragSnapModifier {
+    var modifier: DragSnapModifier? {
         didSet {
             recording = false
             updateTitle()
             onModifierChanged?(modifier)
         }
     }
-    var onModifierChanged: ((DragSnapModifier) -> Void)?
+    var onModifierChanged: ((DragSnapModifier?) -> Void)?
 
     private var recording = false
     private var pendingModifiers: NSEvent.ModifierFlags = []
     private var recordingRevision = 0
 
-    init(modifier: DragSnapModifier) {
+    init(modifier: DragSnapModifier?) {
         self.modifier = modifier
         super.init(frame: .zero)
-        bezelStyle = .rounded
+        applyShortcutRecorderStyle(to: self)
         target = self
         action = #selector(startRecording)
         updateTitle()
@@ -176,7 +315,7 @@ private final class ModifierRecorderButton: NSButton {
     }
 
     private func updateTitle() {
-        title = recording ? "Press modifiers..." : modifier.displayName
+        title = recording ? "Press..." : "Record Modifier"
     }
 }
 
@@ -204,17 +343,19 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     init(
         store: DisplayLayoutStore,
-        initialSnapModifier: DragSnapModifier,
-        initialKeyboardSnapShortcut: KeyboardSnapShortcut,
-        onSnapModifierChanged: @escaping (DragSnapModifier) -> Void,
-        onKeyboardSnapShortcutChanged: @escaping (KeyboardSnapShortcut) -> Void,
+        initialSnapModifier: DragSnapModifier?,
+        initialKeyboardSnapShortcut: KeyboardSnapShortcut?,
+        onSnapModifierChanged: @escaping (DragSnapModifier?) -> Void,
+        onKeyboardSnapShortcutChanged: @escaping (KeyboardSnapShortcut?) -> Void,
+        onAccessibilityGranted: @escaping () -> Void,
         onDebugLoggingChanged: @escaping (Bool) -> Void
     ) {
         self.generalViewController = GeneralSettingsViewController(
             initialSnapModifier: initialSnapModifier,
             initialKeyboardSnapShortcut: initialKeyboardSnapShortcut,
             onSnapModifierChanged: onSnapModifierChanged,
-            onKeyboardSnapShortcutChanged: onKeyboardSnapShortcutChanged
+            onKeyboardSnapShortcutChanged: onKeyboardSnapShortcutChanged,
+            onAccessibilityGranted: onAccessibilityGranted
         )
         self.layoutsViewController = LayoutsSettingsViewController(store: store)
         self.debugViewController = DebugSettingsViewController(onDebugLoggingChanged: onDebugLoggingChanged)
@@ -335,32 +476,47 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
 @MainActor
 private final class GeneralSettingsViewController: NSViewController {
-    private let onSnapModifierChanged: (DragSnapModifier) -> Void
-    private let onKeyboardSnapShortcutChanged: (KeyboardSnapShortcut) -> Void
+    private let onSnapModifierChanged: (DragSnapModifier?) -> Void
+    private let onKeyboardSnapShortcutChanged: (KeyboardSnapShortcut?) -> Void
+    private let onAccessibilityGranted: () -> Void
 
     private let startAtLoginCheckbox = NSButton(checkboxWithTitle: "Start at Login", target: nil, action: nil)
     private let startAtLoginInfoLabel = NSTextField(wrappingLabelWithString: "Automatically opens the app when you start your Mac.")
     private let dragModifierLabel = NSTextField(labelWithString: "Drag Modifier")
+    private let dragModifierValuePill = ShortcutValuePill(frame: .zero)
     private let dragModifierRecorder: ModifierRecorderButton
-    private let dragModifierResetButton = NSButton(title: "Reset", target: nil, action: nil)
     private let dragModifierInfoLabel = NSTextField(wrappingLabelWithString: "")
     private let keyboardShortcutLabel = NSTextField(labelWithString: "Keyboard Snap")
+    private let keyboardShortcutValuePill = ShortcutValuePill(frame: .zero)
     private let keyboardShortcutRecorder: ShortcutRecorderButton
-    private let keyboardShortcutResetButton = NSButton(title: "Reset", target: nil, action: nil)
     private let keyboardShortcutInfoLabel = NSTextField(wrappingLabelWithString: "")
-    private let accessibilityLabel = NSTextField(labelWithString: "")
-    private let accessibilityButton = NSButton(title: "", target: nil, action: nil)
+    private var dragModifierRecorderLeadingToPill: NSLayoutConstraint?
+    private var dragModifierRecorderLeadingToValueSlot: NSLayoutConstraint?
+    private var dragModifierRecorderCompactWidth: NSLayoutConstraint?
+    private var dragModifierRecorderWideWidth: NSLayoutConstraint?
+    private var keyboardShortcutRecorderLeadingToPill: NSLayoutConstraint?
+    private var keyboardShortcutRecorderLeadingToValueSlot: NSLayoutConstraint?
+    private var keyboardShortcutRecorderCompactWidth: NSLayoutConstraint?
+    private var keyboardShortcutRecorderWideWidth: NSLayoutConstraint?
+    private let accessibilityCheckbox = NSButton(checkboxWithTitle: "Accessibility", target: nil, action: nil)
+    private let dragModifierWarningIcon = NSImageView(frame: .zero)
+    private let keyboardShortcutWarningIcon = NSImageView(frame: .zero)
+    private var accessibilityPollTimer: Timer?
+    private var accessibilityPollAttempts = 0
+    private var accessibilityDistributedObserver: Any?
 
     // MARK: - Initialization
 
     init(
-        initialSnapModifier: DragSnapModifier,
-        initialKeyboardSnapShortcut: KeyboardSnapShortcut,
-        onSnapModifierChanged: @escaping (DragSnapModifier) -> Void,
-        onKeyboardSnapShortcutChanged: @escaping (KeyboardSnapShortcut) -> Void
+        initialSnapModifier: DragSnapModifier?,
+        initialKeyboardSnapShortcut: KeyboardSnapShortcut?,
+        onSnapModifierChanged: @escaping (DragSnapModifier?) -> Void,
+        onKeyboardSnapShortcutChanged: @escaping (KeyboardSnapShortcut?) -> Void,
+        onAccessibilityGranted: @escaping () -> Void
     ) {
         self.onSnapModifierChanged = onSnapModifierChanged
         self.onKeyboardSnapShortcutChanged = onKeyboardSnapShortcutChanged
+        self.onAccessibilityGranted = onAccessibilityGranted
         self.dragModifierRecorder = ModifierRecorderButton(modifier: initialSnapModifier)
         self.keyboardShortcutRecorder = ShortcutRecorderButton(shortcut: initialKeyboardSnapShortcut)
         super.init(nibName: nil, bundle: nil)
@@ -380,6 +536,30 @@ private final class GeneralSettingsViewController: NSViewController {
         preferredContentSize = settingsWindowContentSize
     }
 
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        accessibilityDistributedObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.accessibility.api"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                self?.updateAccessibilityStatus()
+            }
+        }
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        accessibilityPollTimer?.invalidate()
+        accessibilityPollTimer = nil
+        if let observer = accessibilityDistributedObserver {
+            DistributedNotificationCenter.default().removeObserver(observer)
+            accessibilityDistributedObserver = nil
+        }
+    }
+
     // MARK: - State
 
     func refreshFromSystem() {
@@ -387,6 +567,10 @@ private final class GeneralSettingsViewController: NSViewController {
         startAtLoginCheckbox.isEnabled = available
         startAtLoginCheckbox.state = LoginItemManager.shared.isEnabled() ? .on : .off
         startAtLoginCheckbox.toolTip = available ? nil : LoginItemManager.shared.unavailableReason
+        startAtLoginInfoLabel.textColor = available ? .secondaryLabelColor : .systemOrange
+        startAtLoginInfoLabel.stringValue = available
+            ? "Automatically opens the app when you start your Mac."
+            : "Unavailable in this build. Use a signed app bundle to enable Start at Login."
         updateAccessibilityStatus()
     }
 
@@ -403,15 +587,17 @@ private final class GeneralSettingsViewController: NSViewController {
 
         dragModifierLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        dragModifierValuePill.translatesAutoresizingMaskIntoConstraints = false
+        dragModifierValuePill.onClear = { [weak self] in
+            self?.clearDragModifier()
+        }
+        updateDragModifierValue()
+
         dragModifierRecorder.translatesAutoresizingMaskIntoConstraints = false
+        dragModifierRecorder.toolTip = "Record Drag Modifier"
         dragModifierRecorder.onModifierChanged = { [weak self] modifier in
             self?.handleDragModifierChanged(modifier)
         }
-
-        dragModifierResetButton.translatesAutoresizingMaskIntoConstraints = false
-        dragModifierResetButton.bezelStyle = .rounded
-        dragModifierResetButton.target = self
-        dragModifierResetButton.action = #selector(resetDragModifier)
 
         dragModifierInfoLabel.translatesAutoresizingMaskIntoConstraints = false
         dragModifierInfoLabel.textColor = .secondaryLabelColor
@@ -420,42 +606,67 @@ private final class GeneralSettingsViewController: NSViewController {
 
         keyboardShortcutLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        keyboardShortcutValuePill.translatesAutoresizingMaskIntoConstraints = false
+        keyboardShortcutValuePill.onClear = { [weak self] in
+            self?.clearKeyboardShortcut()
+        }
+        updateKeyboardShortcutValue()
+
         keyboardShortcutRecorder.translatesAutoresizingMaskIntoConstraints = false
         keyboardShortcutRecorder.onShortcutChanged = { [weak self] shortcut in
             self?.handleKeyboardShortcutChanged(shortcut)
         }
-
-        keyboardShortcutResetButton.translatesAutoresizingMaskIntoConstraints = false
-        keyboardShortcutResetButton.bezelStyle = .rounded
-        keyboardShortcutResetButton.target = self
-        keyboardShortcutResetButton.action = #selector(resetKeyboardShortcut)
 
         keyboardShortcutInfoLabel.translatesAutoresizingMaskIntoConstraints = false
         keyboardShortcutInfoLabel.textColor = .secondaryLabelColor
         keyboardShortcutInfoLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         updateKeyboardShortcutInfo()
 
-        accessibilityLabel.translatesAutoresizingMaskIntoConstraints = false
-        accessibilityLabel.textColor = .secondaryLabelColor
-        accessibilityLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        accessibilityCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        accessibilityCheckbox.target = self
+        accessibilityCheckbox.action = #selector(accessibilityCheckboxClicked)
 
-        accessibilityButton.translatesAutoresizingMaskIntoConstraints = false
-        accessibilityButton.bezelStyle = .rounded
-        accessibilityButton.target = self
-        accessibilityButton.action = #selector(enableAccessibility)
+        for icon in [dragModifierWarningIcon, keyboardShortcutWarningIcon] {
+            icon.translatesAutoresizingMaskIntoConstraints = false
+            icon.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "Warning")
+            icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+            icon.contentTintColor = .systemOrange
+            icon.isHidden = true
+        }
 
         view.addSubview(startAtLoginCheckbox)
         view.addSubview(startAtLoginInfoLabel)
         view.addSubview(dragModifierLabel)
+        view.addSubview(dragModifierValuePill)
         view.addSubview(dragModifierRecorder)
-        view.addSubview(dragModifierResetButton)
         view.addSubview(dragModifierInfoLabel)
         view.addSubview(keyboardShortcutLabel)
+        view.addSubview(keyboardShortcutValuePill)
         view.addSubview(keyboardShortcutRecorder)
-        view.addSubview(keyboardShortcutResetButton)
         view.addSubview(keyboardShortcutInfoLabel)
-        view.addSubview(accessibilityLabel)
-        view.addSubview(accessibilityButton)
+        view.addSubview(dragModifierWarningIcon)
+        view.addSubview(keyboardShortcutWarningIcon)
+        view.addSubview(accessibilityCheckbox)
+
+        dragModifierRecorderLeadingToPill = dragModifierRecorder.leadingAnchor.constraint(
+            equalTo: dragModifierValuePill.trailingAnchor,
+            constant: 8
+        )
+        dragModifierRecorderLeadingToValueSlot = dragModifierRecorder.leadingAnchor.constraint(
+            equalTo: dragModifierValuePill.leadingAnchor
+        )
+        dragModifierRecorderCompactWidth = dragModifierRecorder.widthAnchor.constraint(equalToConstant: 68)
+        dragModifierRecorderWideWidth = dragModifierRecorder.widthAnchor.constraint(equalTo: dragModifierValuePill.widthAnchor)
+
+        keyboardShortcutRecorderLeadingToPill = keyboardShortcutRecorder.leadingAnchor.constraint(
+            equalTo: keyboardShortcutValuePill.trailingAnchor,
+            constant: 8
+        )
+        keyboardShortcutRecorderLeadingToValueSlot = keyboardShortcutRecorder.leadingAnchor.constraint(
+            equalTo: keyboardShortcutValuePill.leadingAnchor
+        )
+        keyboardShortcutRecorderCompactWidth = keyboardShortcutRecorder.widthAnchor.constraint(equalToConstant: 68)
+        keyboardShortcutRecorderWideWidth = keyboardShortcutRecorder.widthAnchor.constraint(equalTo: keyboardShortcutValuePill.widthAnchor)
 
         NSLayoutConstraint.activate([
             startAtLoginCheckbox.topAnchor.constraint(equalTo: view.topAnchor, constant: 24),
@@ -465,45 +676,54 @@ private final class GeneralSettingsViewController: NSViewController {
             startAtLoginInfoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
             startAtLoginInfoLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
-            dragModifierLabel.topAnchor.constraint(equalTo: startAtLoginInfoLabel.bottomAnchor, constant: 18),
+            dragModifierLabel.topAnchor.constraint(equalTo: startAtLoginInfoLabel.bottomAnchor, constant: 16),
             dragModifierLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
-            dragModifierLabel.centerYAnchor.constraint(equalTo: dragModifierRecorder.centerYAnchor),
+            dragModifierLabel.centerYAnchor.constraint(equalTo: dragModifierValuePill.centerYAnchor),
 
-            dragModifierRecorder.topAnchor.constraint(equalTo: startAtLoginInfoLabel.bottomAnchor, constant: 18),
-            dragModifierRecorder.leadingAnchor.constraint(equalTo: dragModifierLabel.trailingAnchor, constant: 12),
-            dragModifierRecorder.widthAnchor.constraint(equalToConstant: 190),
+            dragModifierValuePill.topAnchor.constraint(equalTo: startAtLoginInfoLabel.bottomAnchor, constant: 14),
+            dragModifierValuePill.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 212),
+            dragModifierValuePill.widthAnchor.constraint(equalToConstant: shortcutControlWidth),
+            dragModifierValuePill.heightAnchor.constraint(equalToConstant: shortcutControlHeight),
 
-            dragModifierResetButton.leadingAnchor.constraint(equalTo: dragModifierRecorder.trailingAnchor, constant: 8),
-            dragModifierResetButton.centerYAnchor.constraint(equalTo: dragModifierRecorder.centerYAnchor),
-            dragModifierResetButton.widthAnchor.constraint(equalToConstant: 64),
+            dragModifierRecorder.centerYAnchor.constraint(equalTo: dragModifierValuePill.centerYAnchor),
+            dragModifierRecorder.heightAnchor.constraint(equalToConstant: shortcutControlHeight),
 
-            dragModifierInfoLabel.topAnchor.constraint(equalTo: dragModifierRecorder.bottomAnchor, constant: 6),
+            dragModifierInfoLabel.topAnchor.constraint(equalTo: dragModifierValuePill.bottomAnchor, constant: 6),
             dragModifierInfoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
             dragModifierInfoLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
-            keyboardShortcutLabel.topAnchor.constraint(equalTo: dragModifierInfoLabel.bottomAnchor, constant: 16),
+            keyboardShortcutLabel.topAnchor.constraint(equalTo: dragModifierInfoLabel.bottomAnchor, constant: 12),
             keyboardShortcutLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
-            keyboardShortcutLabel.centerYAnchor.constraint(equalTo: keyboardShortcutRecorder.centerYAnchor),
+            keyboardShortcutLabel.centerYAnchor.constraint(equalTo: keyboardShortcutValuePill.centerYAnchor),
 
-            keyboardShortcutRecorder.topAnchor.constraint(equalTo: dragModifierInfoLabel.bottomAnchor, constant: 16),
-            keyboardShortcutRecorder.leadingAnchor.constraint(equalTo: keyboardShortcutLabel.trailingAnchor, constant: 12),
-            keyboardShortcutRecorder.widthAnchor.constraint(equalToConstant: 190),
+            keyboardShortcutValuePill.topAnchor.constraint(equalTo: dragModifierInfoLabel.bottomAnchor, constant: 10),
+            keyboardShortcutValuePill.leadingAnchor.constraint(equalTo: dragModifierValuePill.leadingAnchor),
+            keyboardShortcutValuePill.widthAnchor.constraint(equalTo: dragModifierValuePill.widthAnchor),
+            keyboardShortcutValuePill.heightAnchor.constraint(equalToConstant: shortcutControlHeight),
 
-            keyboardShortcutResetButton.leadingAnchor.constraint(equalTo: keyboardShortcutRecorder.trailingAnchor, constant: 8),
-            keyboardShortcutResetButton.centerYAnchor.constraint(equalTo: keyboardShortcutRecorder.centerYAnchor),
-            keyboardShortcutResetButton.widthAnchor.constraint(equalToConstant: 64),
+            keyboardShortcutRecorder.centerYAnchor.constraint(equalTo: keyboardShortcutValuePill.centerYAnchor),
+            keyboardShortcutRecorder.heightAnchor.constraint(equalToConstant: shortcutControlHeight),
 
-            keyboardShortcutInfoLabel.topAnchor.constraint(equalTo: keyboardShortcutRecorder.bottomAnchor, constant: 6),
+            keyboardShortcutInfoLabel.topAnchor.constraint(equalTo: keyboardShortcutValuePill.bottomAnchor, constant: 6),
             keyboardShortcutInfoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
             keyboardShortcutInfoLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
-            accessibilityLabel.topAnchor.constraint(equalTo: keyboardShortcutInfoLabel.bottomAnchor, constant: 18),
-            accessibilityLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
-            accessibilityLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            dragModifierWarningIcon.leadingAnchor.constraint(equalTo: dragModifierValuePill.trailingAnchor, constant: 8),
+            dragModifierWarningIcon.centerYAnchor.constraint(equalTo: dragModifierValuePill.centerYAnchor),
+            dragModifierWarningIcon.widthAnchor.constraint(equalToConstant: 16),
+            dragModifierWarningIcon.heightAnchor.constraint(equalToConstant: 16),
 
-            accessibilityButton.topAnchor.constraint(equalTo: accessibilityLabel.bottomAnchor, constant: 8),
-            accessibilityButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
+            keyboardShortcutWarningIcon.leadingAnchor.constraint(equalTo: keyboardShortcutValuePill.trailingAnchor, constant: 8),
+            keyboardShortcutWarningIcon.centerYAnchor.constraint(equalTo: keyboardShortcutValuePill.centerYAnchor),
+            keyboardShortcutWarningIcon.widthAnchor.constraint(equalToConstant: 16),
+            keyboardShortcutWarningIcon.heightAnchor.constraint(equalToConstant: 16),
+
+            accessibilityCheckbox.topAnchor.constraint(equalTo: keyboardShortcutInfoLabel.bottomAnchor, constant: 14),
+            accessibilityCheckbox.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
         ])
+
+        updateDragModifierControls()
+        updateKeyboardShortcutControls()
     }
 
     // MARK: - Actions
@@ -518,24 +738,45 @@ private final class GeneralSettingsViewController: NSViewController {
         }
     }
 
-    @objc
-    private func resetDragModifier() {
-        dragModifierRecorder.modifier = .defaultModifier
+    private func clearDragModifier() {
+        dragModifierRecorder.modifier = nil
     }
 
-    private func handleDragModifierChanged(_ modifier: DragSnapModifier) {
+    private func handleDragModifierChanged(_ modifier: DragSnapModifier?) {
+        updateDragModifierValue()
         updateDragModifierInfo()
+        updateDragModifierControls()
         onSnapModifierChanged(modifier)
     }
 
+    private func updateDragModifierValue() {
+        guard let modifier = dragModifierRecorder.modifier else { return }
+        dragModifierValuePill.setValue(
+            modifier.displayName,
+            clearAccessibilityLabel: "Clear Drag Modifier"
+        )
+    }
+
     private func updateDragModifierInfo() {
-        if let warning = dragModifierRecorder.modifier.warningMessage {
-            dragModifierInfoLabel.textColor = .systemOrange
-            dragModifierInfoLabel.stringValue = warning
-        } else {
-            dragModifierInfoLabel.textColor = .secondaryLabelColor
-            dragModifierInfoLabel.stringValue = "Hold this modifier while dragging to activate snap regions."
-        }
+        let modifier = dragModifierRecorder.modifier
+        dragModifierInfoLabel.textColor = .secondaryLabelColor
+        dragModifierInfoLabel.stringValue = modifier != nil
+            ? "Hold this modifier while dragging to activate snap regions."
+            : "Drag Snap is disabled until a modifier is recorded."
+        let warning = modifier?.warningMessage
+        dragModifierWarningIcon.isHidden = warning == nil
+        dragModifierWarningIcon.toolTip = warning
+    }
+
+    private func updateDragModifierControls() {
+        let hasModifier = dragModifierRecorder.modifier != nil
+        dragModifierValuePill.isHidden = !hasModifier
+        dragModifierRecorder.isHidden = hasModifier
+        dragModifierRecorder.toolTip = hasModifier ? nil : "Record Drag Modifier"
+        dragModifierRecorderLeadingToPill?.isActive = hasModifier
+        dragModifierRecorderCompactWidth?.isActive = hasModifier
+        dragModifierRecorderLeadingToValueSlot?.isActive = !hasModifier
+        dragModifierRecorderWideWidth?.isActive = !hasModifier
     }
 
     @objc
@@ -543,26 +784,54 @@ private final class GeneralSettingsViewController: NSViewController {
         keyboardShortcutRecorder.shortcut = .defaultShortcut
     }
 
-    private func handleKeyboardShortcutChanged(_ shortcut: KeyboardSnapShortcut) {
+    private func clearKeyboardShortcut() {
+        keyboardShortcutRecorder.shortcut = nil
+    }
+
+    private func handleKeyboardShortcutChanged(_ shortcut: KeyboardSnapShortcut?) {
+        updateKeyboardShortcutValue()
         updateKeyboardShortcutInfo()
+        updateKeyboardShortcutControls()
         onKeyboardSnapShortcutChanged(shortcut)
     }
 
+    private func updateKeyboardShortcutValue() {
+        guard let shortcut = keyboardShortcutRecorder.shortcut else { return }
+        keyboardShortcutValuePill.setValue(
+            shortcut.displayName,
+            clearAccessibilityLabel: "Clear Keyboard Snap shortcut"
+        )
+    }
+
+    private func updateKeyboardShortcutControls() {
+        let hasShortcut = keyboardShortcutRecorder.shortcut != nil
+        keyboardShortcutValuePill.isHidden = !hasShortcut
+        keyboardShortcutRecorder.isHidden = hasShortcut
+        keyboardShortcutRecorder.toolTip = hasShortcut ? nil : "Record Keyboard Snap shortcut"
+        keyboardShortcutRecorderLeadingToPill?.isActive = hasShortcut
+        keyboardShortcutRecorderCompactWidth?.isActive = hasShortcut
+        keyboardShortcutRecorderLeadingToValueSlot?.isActive = !hasShortcut
+        keyboardShortcutRecorderWideWidth?.isActive = !hasShortcut
+    }
+
     private func updateKeyboardShortcutInfo() {
-        if let warning = keyboardShortcutRecorder.shortcut.warningMessage {
-            keyboardShortcutInfoLabel.textColor = .systemOrange
-            keyboardShortcutInfoLabel.stringValue = warning
-        } else {
-            keyboardShortcutInfoLabel.textColor = .secondaryLabelColor
-            keyboardShortcutInfoLabel.stringValue = "Opens the snap picker without dragging."
-        }
+        let shortcut = keyboardShortcutRecorder.shortcut
+        keyboardShortcutInfoLabel.textColor = .secondaryLabelColor
+        keyboardShortcutInfoLabel.stringValue = shortcut != nil
+            ? "Opens the snap picker without dragging."
+            : "Keyboard Snap is disabled until a shortcut is recorded."
+        let warning = shortcut?.warningMessage
+        keyboardShortcutWarningIcon.isHidden = warning == nil
+        keyboardShortcutWarningIcon.toolTip = warning
     }
 
     @objc
-    private func enableAccessibility() {
-        _ = PermissionManager().ensureAccessibilityPermission(prompt: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-            self?.updateAccessibilityStatus()
+    private func accessibilityCheckboxClicked() {
+        let alreadyEnabled = PermissionManager().ensureAccessibilityPermission(prompt: false)
+        updateAccessibilityStatus()  // immediately restore correct checkbox state
+        if !alreadyEnabled {
+            _ = PermissionManager().ensureAccessibilityPermission(prompt: true)
+            startAccessibilityPolling()
         }
     }
 
@@ -570,17 +839,61 @@ private final class GeneralSettingsViewController: NSViewController {
     // so the settings screen re-checks the flag after a short delay.
     private func updateAccessibilityStatus() {
         let enabled = PermissionManager().ensureAccessibilityPermission(prompt: false)
+        accessibilityCheckbox.state = enabled ? .on : .off
+        accessibilityCheckbox.title = enabled ? "Accessibility Enabled" : "Accessibility Not Enabled"
         if enabled {
-            accessibilityLabel.stringValue = "Accessibility: Enabled"
-            accessibilityButton.title = "Accessibility Enabled"
-            accessibilityButton.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Enabled")
-            accessibilityButton.isEnabled = false
-        } else {
-            accessibilityLabel.stringValue = "Accessibility: Not Enabled"
-            accessibilityButton.title = "Enable Accessibility"
-            accessibilityButton.image = NSImage(systemSymbolName: "exclamationmark.circle", accessibilityDescription: "Enable")
-            accessibilityButton.isEnabled = true
+            accessibilityPollTimer?.invalidate()
+            accessibilityPollTimer = nil
+            accessibilityPollAttempts = 0
         }
+    }
+
+    private func startAccessibilityPolling() {
+        accessibilityPollTimer?.invalidate()
+        accessibilityPollAttempts = 0
+        accessibilityPollTimer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.pollAccessibilityStatus()
+            }
+        }
+    }
+
+    private func pollAccessibilityStatus() {
+        accessibilityPollAttempts += 1
+        let enabled = PermissionManager().ensureAccessibilityPermission(prompt: false)
+        guard enabled else {
+            if accessibilityPollAttempts >= 40 {
+                accessibilityPollTimer?.invalidate()
+                accessibilityPollTimer = nil
+                accessibilityPollAttempts = 0
+                updateAccessibilityStatus()
+            }
+            return
+        }
+
+        updateAccessibilityStatus()
+        onAccessibilityGranted()
+    }
+}
+
+private final class LayoutCatalogRowView: NSTableRowView {
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard selectionHighlightStyle != .none else { return }
+        let selectionRect = bounds.insetBy(dx: 1, dy: 1)
+        let path = NSBezierPath(roundedRect: selectionRect, xRadius: 6, yRadius: 6)
+        NSColor.controlAccentColor.withAlphaComponent(0.18).setFill()
+        path.fill()
+    }
+}
+
+// Prevents AppKit from automatically making text white when a row is selected.
+// The standard NSTableCellView backgroundStyle propagation inverts text to
+// selectedMenuItemTextColor on emphasized rows, which is unreadable against our
+// very-light custom selection fill.
+private final class LayoutCatalogCellView: NSTableCellView {
+    override var backgroundStyle: NSView.BackgroundStyle {
+        get { super.backgroundStyle }
+        set {}
     }
 }
 
@@ -589,7 +902,7 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     var onLayoutsChanged: ((String?) -> Void)?
 
     private let store: DisplayLayoutStore
-    private var layouts: [RegionLayout] = []
+    private var catalogItems: [LayoutCatalogItem] = []
 
     private let tableView = NSTableView(frame: .zero)
     private let scrollView = NSScrollView(frame: .zero)
@@ -597,14 +910,15 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     private let removeButton = NSButton(title: "-", target: nil, action: nil)
     private let previewView = LayoutPreviewView(frame: .zero)
     private let dividerHandleBadge = NSImageView(frame: .zero)
-    private let mergeHandleButton = NSButton(title: "", target: nil, action: nil)
-    private let statusLabel = NSTextField(labelWithString: "")
+    private let mergeHandleButton = CircularOverlayButton(frame: .zero)
+    private let statusLabel = secondaryLabel()
     private var isSynchronizingPreviewState = false
     private var dividerHandleCenterX: NSLayoutConstraint?
     private var dividerHandleCenterY: NSLayoutConstraint?
     private var mergeHandleCenterX: NSLayoutConstraint?
     private var mergeHandleCenterY: NSLayoutConstraint?
     private var activeLayoutIDForInteractiveResize: String?
+    private var pendingInteractiveResize: (firstRegionIDs: [Int], secondRegionIDs: [Int], axis: SplitAxis, ratio: CGFloat)?
 
     // MARK: - Initialization
 
@@ -630,13 +944,14 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     // MARK: - Data Loading
 
     func reloadLayouts(selectLayoutID: String?) {
-        layouts = orderedSettingsLayouts(store.allLayouts())
+        let selectedID = selectLayoutID ?? selectedLayout?.id
+        catalogItems = store.catalogItems()
         tableView.reloadData()
 
-        if let selectLayoutID,
-           let idx = layouts.firstIndex(where: { $0.id == selectLayoutID }) {
+        if let selectedID,
+           let idx = catalogItems.firstIndex(where: { $0.layout.id == selectedID }) {
             tableView.selectRowIndexes(IndexSet(integer: idx), byExtendingSelection: false)
-        } else if tableView.selectedRow < 0, !layouts.isEmpty {
+        } else if tableView.selectedRow < 0, !catalogItems.isEmpty {
             tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         }
 
@@ -646,31 +961,45 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     // MARK: - Layout
 
     private func configureUI() {
-        let colName = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
-        colName.title = "Layouts"
-        colName.width = 170
-        tableView.addTableColumn(colName)
+        let layoutColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("layout"))
+        layoutColumn.width = 198
+        layoutColumn.resizingMask = .autoresizingMask
+        tableView.addTableColumn(layoutColumn)
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.usesAlternatingRowBackgroundColors = true
+        tableView.headerView = nil
+        tableView.style = .plain
+        tableView.usesAlternatingRowBackgroundColors = false
         tableView.rowHeight = settingsTableRowHeight
+        tableView.intercellSpacing = .zero
         tableView.target = self
         tableView.doubleAction = #selector(handleTableDoubleClick)
+        tableView.registerForDraggedTypes([layoutRowPasteboardType])
+        tableView.setDraggingSourceOperationMask(.move, forLocal: true)
+        tableView.draggingDestinationFeedbackStyle = .gap
+        tableView.allowsEmptySelection = false
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.wantsLayer = true
-        scrollView.layer?.cornerRadius = 8
+        scrollView.layer?.cornerRadius = 7
         scrollView.layer?.masksToBounds = true
         scrollView.borderType = .bezelBorder
 
         addButton.bezelStyle = .rounded
+        addButton.title = ""
+        addButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Layout")
+        addButton.toolTip = "Add Layout"
         addButton.translatesAutoresizingMaskIntoConstraints = false
         addButton.target = self
         addButton.action = #selector(addLayout)
 
         removeButton.bezelStyle = .rounded
+        removeButton.title = ""
+        removeButton.image = NSImage(systemSymbolName: "minus", accessibilityDescription: "Remove Layout")
+        removeButton.toolTip = "Remove Layout"
         removeButton.translatesAutoresizingMaskIntoConstraints = false
         removeButton.target = self
         removeButton.action = #selector(removeLayout)
@@ -686,34 +1015,44 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
             guard let self, !self.isSynchronizingPreviewState else { return }
             self.updateEditorForSelection()
         }
-        previewView.onDividerRatioChanged = { [weak self] firstRegionID, secondRegionID, ratio in
-            self?.handleDividerRatioChanged(firstRegionID: firstRegionID, secondRegionID: secondRegionID, ratio: ratio)
+        previewView.onDividerRatioChanged = { [weak self] firstRegionIDs, secondRegionIDs, axis, ratio in
+            self?.handleDividerRatioChanged(
+                firstRegionIDs: firstRegionIDs,
+                secondRegionIDs: secondRegionIDs,
+                axis: axis,
+                ratio: ratio
+            )
+        }
+        previewView.onDividerInteractionEnded = { [weak self] firstRegionIDs, secondRegionIDs, axis, ratio in
+            self?.handleDividerInteractionEnded(
+                firstRegionIDs: firstRegionIDs,
+                secondRegionIDs: secondRegionIDs,
+                axis: axis,
+                ratio: ratio
+            )
         }
         previewView.onSplitRequested = { [weak self] regionID, axis, ratio in
             self?.handleSplitRequested(regionID: regionID, axis: axis, ratio: ratio)
         }
 
         dividerHandleBadge.translatesAutoresizingMaskIntoConstraints = false
-        dividerHandleBadge.image = NSImage(systemSymbolName: "arrow.left.and.right.square", accessibilityDescription: "Resize Divider")
-        dividerHandleBadge.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        dividerHandleBadge.image = NSImage(systemSymbolName: "arrow.left.and.right", accessibilityDescription: "Resize Divider")
+        dividerHandleBadge.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
         dividerHandleBadge.wantsLayer = true
-        dividerHandleBadge.layer?.cornerRadius = 6
-        dividerHandleBadge.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
+        dividerHandleBadge.layer?.cornerRadius = 5
+        dividerHandleBadge.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(layoutOverlayControlAlpha).cgColor
         dividerHandleBadge.layer?.borderWidth = 1
-        dividerHandleBadge.layer?.borderColor = NSColor.separatorColor.cgColor
+        dividerHandleBadge.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(layoutOverlayBorderAlpha).cgColor
+        dividerHandleBadge.contentTintColor = .secondaryLabelColor
         dividerHandleBadge.isHidden = true
 
         mergeHandleButton.translatesAutoresizingMaskIntoConstraints = false
-        mergeHandleButton.bezelStyle = .texturedRounded
-        mergeHandleButton.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: "Remove Divider")
-        mergeHandleButton.isBordered = true
+        mergeHandleButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Remove Divider")
+        mergeHandleButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
         mergeHandleButton.target = self
         mergeHandleButton.action = #selector(mergeSelectedRegions)
+        mergeHandleButton.toolTip = "Remove Divider"
         mergeHandleButton.isHidden = true
-
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusLabel.textColor = .secondaryLabelColor
-        statusLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
 
         view.addSubview(scrollView)
         view.addSubview(addButton)
@@ -721,15 +1060,16 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         view.addSubview(previewView)
         view.addSubview(dividerHandleBadge)
         view.addSubview(mergeHandleButton)
+        view.addSubview(statusLabel)
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            scrollView.widthAnchor.constraint(equalToConstant: 170),
+            scrollView.widthAnchor.constraint(equalToConstant: 198),
             scrollView.heightAnchor.constraint(equalToConstant: compactTableHeight),
 
             addButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            addButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
+            addButton.topAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: 6),
             addButton.widthAnchor.constraint(equalToConstant: 30),
 
             removeButton.leadingAnchor.constraint(equalTo: addButton.trailingAnchor, constant: 8),
@@ -741,10 +1081,14 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
             previewView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             previewView.heightAnchor.constraint(equalToConstant: 160),
 
-            dividerHandleBadge.widthAnchor.constraint(equalToConstant: 22),
-            dividerHandleBadge.heightAnchor.constraint(equalToConstant: 22),
-            mergeHandleButton.widthAnchor.constraint(equalToConstant: 22),
-            mergeHandleButton.heightAnchor.constraint(equalToConstant: 22),
+            statusLabel.topAnchor.constraint(equalTo: previewView.bottomAnchor, constant: 10),
+            statusLabel.leadingAnchor.constraint(equalTo: previewView.leadingAnchor),
+            statusLabel.trailingAnchor.constraint(equalTo: previewView.trailingAnchor),
+
+            dividerHandleBadge.widthAnchor.constraint(equalToConstant: 20),
+            dividerHandleBadge.heightAnchor.constraint(equalToConstant: 20),
+            mergeHandleButton.widthAnchor.constraint(equalToConstant: 20),
+            mergeHandleButton.heightAnchor.constraint(equalToConstant: 20),
         ])
 
         let dividerCenterX = dividerHandleBadge.centerXAnchor.constraint(equalTo: previewView.leadingAnchor, constant: 0)
@@ -763,49 +1107,109 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     }
 
     private var compactTableHeight: CGFloat {
-        settingsTableHeaderHeight + (CGFloat(settingsVisibleTableRows) * tableView.rowHeight)
+        CGFloat(settingsVisibleTableRows) * tableView.rowHeight
     }
 
     // MARK: - NSTableViewDataSource
 
-    func numberOfRows(in tableView: NSTableView) -> Int { layouts.count }
+    func numberOfRows(in tableView: NSTableView) -> Int { catalogItems.count }
 
     // MARK: - NSTableViewDelegate
 
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        LayoutCatalogRowView()
+    }
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard row < layouts.count else { return nil }
-        let layout = layouts[row]
-        let cellID = NSUserInterfaceItemIdentifier("LayoutNameCell")
-        let cell = tableView.makeView(withIdentifier: cellID, owner: self) as? NSTableCellView ?? {
-            let c = NSTableCellView()
-            c.identifier = cellID
-            let field = NSTextField(string: "")
-            field.translatesAutoresizingMaskIntoConstraints = false
-            field.isBordered = false
-            field.drawsBackground = false
-            field.focusRingType = .none
-            field.font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-            c.addSubview(field)
-            c.textField = field
-            NSLayoutConstraint.activate([
-                field.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 6),
-                field.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -6),
-                field.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-            ])
-            return c
-        }()
+        guard row < catalogItems.count, tableColumn?.identifier.rawValue == "layout" else { return nil }
+        let item = catalogItems[row]
+        let layout = item.layout
+        let cell = LayoutCatalogCellView()
+
+        let visibilityButton = NSButton()
+        visibilityButton.translatesAutoresizingMaskIntoConstraints = false
+        visibilityButton.image = NSImage(
+            systemSymbolName: item.isVisible ? "eye" : "eye.slash",
+            accessibilityDescription: item.isVisible ? "Visible in Picker" : "Hidden from Picker"
+        )
+        visibilityButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+        visibilityButton.contentTintColor = rowIconColor(isVisible: item.isVisible)
+        visibilityButton.isBordered = false
+        visibilityButton.target = self
+        visibilityButton.action = #selector(toggleVisibility)
+        visibilityButton.toolTip = item.isVisible ? "Hide from Picker" : "Show in Picker"
+        visibilityButton.setAccessibilityLabel(
+            item.isVisible ? "Hide \(layout.name) from Picker" : "Show \(layout.name) in Picker"
+        )
+        visibilityButton.tag = row
+
+        let field = NSTextField(string: layout.name)
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        field.lineBreakMode = .byTruncatingTail
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        cell.addSubview(visibilityButton)
+        cell.addSubview(field)
+        cell.textField = field
+        NSLayoutConstraint.activate([
+            visibilityButton.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
+            visibilityButton.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            visibilityButton.widthAnchor.constraint(equalToConstant: 20),
+            visibilityButton.heightAnchor.constraint(equalToConstant: 20),
+
+            field.leadingAnchor.constraint(equalTo: visibilityButton.trailingAnchor, constant: 6),
+            field.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
+            field.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+        ])
 
         let editable = store.isLayoutEditable(id: layout.id)
-        cell.textField?.stringValue = layout.name
-        cell.textField?.isEditable = editable
-        cell.textField?.isSelectable = true
-        cell.textField?.textColor = editable ? .labelColor : .secondaryLabelColor
-        cell.textField?.delegate = self
-        cell.textField?.tag = row
+        field.isEditable = editable
+        field.isSelectable = true
+        field.textColor = rowTextColor(isVisible: item.isVisible, isEditable: editable)
+        field.delegate = self
+        field.tag = row
         return cell
     }
 
-    func tableViewSelectionDidChange(_ notification: Notification) { updateEditorForSelection() }
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        tableView.needsDisplay = true
+        updateEditorForSelection()
+    }
+
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+        guard catalogItems.indices.contains(row) else { return nil }
+        let item = NSPasteboardItem()
+        item.setString(catalogItems[row].layout.id, forType: layoutRowPasteboardType)
+        return item
+    }
+
+    func tableView(
+        _ tableView: NSTableView,
+        validateDrop info: NSDraggingInfo,
+        proposedRow row: Int,
+        proposedDropOperation dropOperation: NSTableView.DropOperation
+    ) -> NSDragOperation {
+        guard info.draggingSource as? NSTableView === tableView else { return [] }
+        tableView.setDropRow(row, dropOperation: .above)
+        return .move
+    }
+
+    func tableView(
+        _ tableView: NSTableView,
+        acceptDrop info: NSDraggingInfo,
+        row: Int,
+        dropOperation: NSTableView.DropOperation
+    ) -> Bool {
+        guard let layoutID = info.draggingPasteboard.string(forType: layoutRowPasteboardType),
+              store.moveLayout(id: layoutID, to: row) else { return false }
+        reloadLayouts(selectLayoutID: layoutID)
+        onLayoutsChanged?(layoutID)
+        return true
+    }
 
     // MARK: - Actions
 
@@ -814,18 +1218,43 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         let layout = store.addFullscreenLayout(name: "")
         reloadLayouts(selectLayoutID: layout.id)
         onLayoutsChanged?(layout.id)
+        if let row = catalogItems.firstIndex(where: { $0.layout.id == layout.id }) {
+            tableView.editColumn(0, row: row, with: nil, select: true)
+        }
     }
 
     @objc
     private func removeLayout() {
         let row = tableView.selectedRow
-        guard row >= 0, row < layouts.count else { return }
-        let layout = layouts[row]
+        guard row >= 0, row < catalogItems.count else { return }
+        let layout = catalogItems[row].layout
         guard store.isLayoutEditable(id: layout.id) else { return }
         if store.removeLayout(id: layout.id) {
             reloadLayouts(selectLayoutID: nil)
             onLayoutsChanged?(nil)
         }
+    }
+
+    @objc
+    private func toggleVisibility(_ sender: NSButton) {
+        guard catalogItems.indices.contains(sender.tag) else { return }
+        let item = catalogItems[sender.tag]
+        guard store.setVisible(!item.isVisible, for: item.layout.id) else {
+            NSSound.beep()
+            reloadLayouts(selectLayoutID: item.layout.id)
+            return
+        }
+        reloadLayouts(selectLayoutID: item.layout.id)
+        onLayoutsChanged?(item.layout.id)
+    }
+
+    private func rowTextColor(isVisible: Bool, isEditable: Bool) -> NSColor {
+        if !isVisible { return .tertiaryLabelColor }
+        return isEditable ? .labelColor : .secondaryLabelColor
+    }
+
+    private func rowIconColor(isVisible: Bool) -> NSColor {
+        isVisible ? .secondaryLabelColor : .tertiaryLabelColor
     }
 
     private func handleSplitRequested(regionID: Int, axis: SplitAxis, ratio: CGFloat) {
@@ -854,8 +1283,8 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
 
     private var selectedLayout: RegionLayout? {
         let row = tableView.selectedRow
-        guard row >= 0, row < layouts.count else { return nil }
-        return layouts[row]
+        guard row >= 0, row < catalogItems.count else { return nil }
+        return catalogItems[row].layout
     }
 
     // MARK: - Preview Synchronization
@@ -866,6 +1295,7 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
                 previewView.layout = nil
             }
             removeButton.isEnabled = false
+            removeButton.toolTip = "Select a custom layout to remove."
             dividerHandleBadge.isHidden = true
             mergeHandleButton.isHidden = true
             mergeHandleButton.isEnabled = false
@@ -882,24 +1312,23 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
 
         let editable = store.isLayoutEditable(id: layout.id)
         removeButton.isEnabled = editable
+        removeButton.toolTip = editable
+            ? "Remove Layout"
+            : "Built-in layouts cannot be removed. Hide this layout using the eye icon."
         previewView.isEditableLayout = editable
         updateDividerHandle(for: layout, canEdit: editable)
+        updateMergeHandle(for: layout, canEdit: editable)
+    }
 
-        if let regionID = previewView.primarySelectedRegionID,
-           let region = layout.regions.first(where: { $0.id == regionID }) {
-            let percent = max(region.normalizedFrame.width, region.normalizedFrame.height) * 100.0
-            updateMergeHandle(for: layout, canEdit: editable)
-            if previewView.selectedRegionIDs.count == 2 {
-                statusLabel.stringValue = mergeHandleButton.isEnabled ? "Merge handle available on divider." : "Selected regions are not mergeable."
-            } else if editable {
-                statusLabel.stringValue = "Drag top divider for horizontal split or left divider for vertical split."
-            } else {
-                statusLabel.stringValue = "Selected region: \(Int(round(percent)))%"
-            }
-        } else {
-            updateMergeHandle(for: layout, canEdit: editable)
-            statusLabel.stringValue = "Select a region in the preview."
+    private func selectedRegionStatus(for region: RegionLayout.Region) -> String {
+        let width = region.normalizedFrame.width
+        let height = region.normalizedFrame.height
+        if width >= 0.995, height >= 0.995 {
+            return "Full layout selected."
         }
+        let w = Int((width * 100).rounded())
+        let h = Int((height * 100).rounded())
+        return "Region selected: \(w)% × \(h)%"
     }
 
     private func isMergeSelectionValid(for layout: RegionLayout) -> Bool {
@@ -919,22 +1348,57 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         update()
     }
 
-    private func handleDividerRatioChanged(firstRegionID: Int, secondRegionID: Int, ratio: CGFloat) {
+    private func handleDividerRatioChanged(
+        firstRegionIDs: [Int],
+        secondRegionIDs: [Int],
+        axis: SplitAxis,
+        ratio: CGFloat
+    ) {
         guard let layout = selectedLayout else { return }
         activeLayoutIDForInteractiveResize = layout.id
-        guard let updated = store.resizeAdjacentRegions(
+        pendingInteractiveResize = (firstRegionIDs, secondRegionIDs, axis, ratio)
+        guard let updated = store.resizeAdjacentRegionGroups(
             layoutID: layout.id,
-            firstRegionID: firstRegionID,
-            secondRegionID: secondRegionID,
-            ratio: ratio
+            firstRegionIDs: firstRegionIDs,
+            secondRegionIDs: secondRegionIDs,
+            axis: axis,
+            ratio: ratio,
+            persistChanges: false
         ) else { return }
-        if let index = layouts.firstIndex(where: { $0.id == updated.id }) {
-            layouts[index] = updated
+        if let index = catalogItems.firstIndex(where: { $0.layout.id == updated.id }) {
+            let item = catalogItems[index]
+            catalogItems[index] = LayoutCatalogItem(
+                layout: updated,
+                isVisible: item.isVisible,
+                isBuiltIn: item.isBuiltIn
+            )
         }
         synchronizePreviewState {
             previewView.layout = updated
         }
-        updateEditorForSelection()
+        let editable = store.isLayoutEditable(id: updated.id)
+        updateDividerHandle(for: updated, canEdit: editable)
+        updateMergeHandle(for: updated, canEdit: editable)
+    }
+
+    private func handleDividerInteractionEnded(
+        firstRegionIDs: [Int],
+        secondRegionIDs: [Int],
+        axis: SplitAxis,
+        ratio: CGFloat
+    ) {
+        guard let layout = selectedLayout else { return }
+        guard activeLayoutIDForInteractiveResize == layout.id || pendingInteractiveResize != nil else { return }
+        _ = store.resizeAdjacentRegionGroups(
+            layoutID: layout.id,
+            firstRegionIDs: firstRegionIDs,
+            secondRegionIDs: secondRegionIDs,
+            axis: axis,
+            ratio: ratio,
+            persistChanges: true
+        )
+        pendingInteractiveResize = nil
+        activeLayoutIDForInteractiveResize = nil
     }
 
     private func updateMergeHandle(for layout: RegionLayout, canEdit: Bool) {
@@ -951,9 +1415,9 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         let mergePoint: CGPoint
         switch axis {
         case .vertical:
-            mergePoint = CGPoint(x: point.x, y: point.y + 16)
+            mergePoint = CGPoint(x: point.x, y: point.y + 26)
         case .horizontal:
-            mergePoint = CGPoint(x: point.x - 16, y: point.y)
+            mergePoint = CGPoint(x: point.x - 26, y: point.y)
         }
 
         let yFromTop = max(0, previewView.bounds.height - mergePoint.y)
@@ -965,7 +1429,6 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
 
     private func updateDividerHandle(for layout: RegionLayout, canEdit: Bool) {
         guard canEdit,
-              previewView.selectedRegionIDs.count == 2,
               let point = previewView.selectedDividerPoint(),
               let axis = previewView.selectedDividerAxis() else {
             dividerHandleBadge.isHidden = true
@@ -973,7 +1436,7 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
         }
 
         dividerHandleBadge.image = NSImage(
-            systemSymbolName: axis == .vertical ? "arrow.left.and.right.square" : "arrow.up.and.down.square",
+            systemSymbolName: axis == .vertical ? "arrow.left.and.right" : "arrow.up.and.down",
             accessibilityDescription: "Resize Divider"
         )
         let yFromTop = max(0, previewView.bounds.height - point.y)
@@ -985,10 +1448,8 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     @objc
     private func handleTableDoubleClick() {
         let row = tableView.clickedRow
-        let column = tableView.clickedColumn
-        guard row >= 0, row < layouts.count else { return }
-        guard column == 0 else { return }
-        let layout = layouts[row]
+        guard row >= 0, row < catalogItems.count else { return }
+        let layout = catalogItems[row].layout
         guard store.isLayoutEditable(id: layout.id) else { return }
         tableView.editColumn(0, row: row, with: nil, select: true)
     }
@@ -996,9 +1457,9 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
     func controlTextDidEndEditing(_ obj: Notification) {
         guard let textField = obj.object as? NSTextField else { return }
         let row = textField.tag
-        guard row >= 0, row < layouts.count else { return }
+        guard row >= 0, row < catalogItems.count else { return }
 
-        let layout = layouts[row]
+        let layout = catalogItems[row].layout
         guard store.isLayoutEditable(id: layout.id) else {
             reloadLayouts(selectLayoutID: layout.id)
             return
@@ -1015,12 +1476,16 @@ private final class LayoutsSettingsViewController: NSViewController, NSTableView
 
 private final class LayoutPreviewView: NSView {
     private struct DividerHit {
-        let firstRegionID: Int
-        let secondRegionID: Int
+        let firstRegionIDs: [Int]
+        let secondRegionIDs: [Int]
         let axis: SplitAxis
         let lineRect: NSRect
         let touchRect: NSRect
         let ratioSpan: ClosedRange<CGFloat>
+
+        var regionIDs: [Int] {
+            firstRegionIDs + secondRegionIDs
+        }
     }
 
     // MARK: - State
@@ -1052,11 +1517,16 @@ private final class LayoutPreviewView: NSView {
 
     var onSelectionChanged: (([Int]) -> Void)?
     var onDragSelectionChanged: (([Int]) -> Void)?
-    var onDividerRatioChanged: ((Int, Int, CGFloat) -> Void)?
+    var onDividerRatioChanged: (([Int], [Int], SplitAxis, CGFloat) -> Void)?
+    var onDividerInteractionEnded: (([Int], [Int], SplitAxis, CGFloat) -> Void)?
     var onSplitRequested: ((Int, SplitAxis, CGFloat) -> Void)?
-    var isEditableLayout: Bool = false
-    private var dragStartPoint: NSPoint?
+    var isEditableLayout: Bool = false {
+        didSet {
+            needsDisplay = true
+        }
+    }
     private var activeDivider: DividerHit?
+    private var currentDividerRatio: CGFloat?
     private var isDraggingSplitSource = false
     private var splitSourceDragPoint: NSPoint?
     private var pendingSplitDrop: (regionID: Int, axis: SplitAxis, ratio: CGFloat, lineRect: NSRect)?
@@ -1064,39 +1534,18 @@ private final class LayoutPreviewView: NSView {
     // MARK: - Selection Helpers
 
     func selectedDividerPoint() -> CGPoint? {
-        guard let layout, selectedRegionIDs.count == 2 else { return nil }
-        guard let first = layout.regions.first(where: { $0.id == selectedRegionIDs[0] }),
-              let second = layout.regions.first(where: { $0.id == selectedRegionIDs[1] }) else { return nil }
-
-        let screenRect = bounds.insetBy(dx: 16, dy: 22)
-        let firstRect = rect(for: first.normalizedFrame, in: screenRect)
-        let secondRect = rect(for: second.normalizedFrame, in: screenRect)
-        let epsilon: CGFloat = 1.0
-
-        if abs(firstRect.maxX - secondRect.minX) < epsilon || abs(secondRect.maxX - firstRect.minX) < epsilon {
-            let x = abs(firstRect.maxX - secondRect.minX) < epsilon ? firstRect.maxX : secondRect.maxX
-            let overlapMinY = max(firstRect.minY, secondRect.minY)
-            let overlapMaxY = min(firstRect.maxY, secondRect.maxY)
-            guard overlapMaxY > overlapMinY else { return nil }
-            return CGPoint(x: x, y: (overlapMinY + overlapMaxY) / 2)
-        }
-
-        if abs(firstRect.maxY - secondRect.minY) < epsilon || abs(secondRect.maxY - firstRect.minY) < epsilon {
-            let y = abs(firstRect.maxY - secondRect.minY) < epsilon ? firstRect.maxY : secondRect.maxY
-            let overlapMinX = max(firstRect.minX, secondRect.minX)
-            let overlapMaxX = min(firstRect.maxX, secondRect.maxX)
-            guard overlapMaxX > overlapMinX else { return nil }
-            return CGPoint(x: (overlapMinX + overlapMaxX) / 2, y: y)
-        }
-
-        return nil
+        selectedDividerHit().map { CGPoint(x: $0.lineRect.midX, y: $0.lineRect.midY) }
     }
 
     func selectedDividerAxis() -> SplitAxis? {
+        selectedDividerHit()?.axis
+    }
+
+    private func selectedDividerHit() -> DividerHit? {
         guard let layout else { return nil }
+        let selectedIDs = Set(selectedRegionIDs)
         return dividerHits(for: layout, in: bounds.insetBy(dx: 16, dy: 22))
-            .first(where: { Set([$0.firstRegionID, $0.secondRegionID]) == Set(selectedRegionIDs) })?
-            .axis
+            .first(where: { Set($0.regionIDs) == selectedIDs })
     }
 
     // MARK: - Drawing
@@ -1114,10 +1563,6 @@ private final class LayoutPreviewView: NSView {
         path.lineWidth = 1
         path.stroke()
 
-        if isEditableLayout {
-            drawParkedDividers(in: canvas)
-        }
-
         guard let layout else { return }
         let dividers = dividerHits(for: layout, in: screenRect)
         for region in layout.regions {
@@ -1125,9 +1570,9 @@ private final class LayoutPreviewView: NSView {
 
             let regionPath = NSBezierPath(roundedRect: r, xRadius: 5, yRadius: 5)
             if selectedRegionIDs.contains(region.id) {
-                NSColor.systemBlue.withAlphaComponent(0.35).setFill()
+                NSColor.systemBlue.withAlphaComponent(isEditableLayout ? 0.28 : 0.26).setFill()
             } else {
-                NSColor.systemGray.withAlphaComponent(0.2).setFill()
+                NSColor.systemGray.withAlphaComponent(0.18).setFill()
             }
             regionPath.fill()
             NSColor.separatorColor.setStroke()
@@ -1135,7 +1580,7 @@ private final class LayoutPreviewView: NSView {
             regionPath.stroke()
 
             if let activeDivider,
-               (region.id == activeDivider.firstRegionID || region.id == activeDivider.secondRegionID) {
+               activeDivider.regionIDs.contains(region.id) {
                 let label = displayPercentageLabel(for: region.normalizedFrame, axis: activeDivider.axis)
                 let attrs: [NSAttributedString.Key: Any] = [
                     .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium),
@@ -1160,18 +1605,32 @@ private final class LayoutPreviewView: NSView {
         }
 
         if let activeDivider {
-            NSColor.controlAccentColor.withAlphaComponent(0.35).setFill()
+            NSColor.controlAccentColor.withAlphaComponent(0.28).setFill()
             NSBezierPath(roundedRect: activeDivider.lineRect.insetBy(dx: -2, dy: -2), xRadius: 4, yRadius: 4).fill()
-        } else if selectedRegionIDs.count == 2,
-                  let divider = dividers.first(where: { Set([$0.firstRegionID, $0.secondRegionID]) == Set(selectedRegionIDs) }) {
-            NSColor.controlAccentColor.withAlphaComponent(0.18).setFill()
+        } else if let divider = dividers.first(where: { Set($0.regionIDs) == Set(selectedRegionIDs) }) {
+            NSColor.controlAccentColor.withAlphaComponent(0.12).setFill()
             NSBezierPath(roundedRect: divider.lineRect.insetBy(dx: -1, dy: -1), xRadius: 4, yRadius: 4).fill()
         }
 
         if let pendingSplitDrop {
-            NSColor.controlAccentColor.withAlphaComponent(0.28).setFill()
+            NSColor.controlAccentColor.withAlphaComponent(0.24).setFill()
             NSBezierPath(roundedRect: pendingSplitDrop.lineRect.insetBy(dx: -2, dy: -2), xRadius: 4, yRadius: 4).fill()
         }
+
+        if isEditableLayout {
+            drawParkedDividers(in: canvas)
+        }
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard isEditableLayout, let layout else { return }
+        let screenRect = bounds.insetBy(dx: 16, dy: 22)
+        for divider in dividerHits(for: layout, in: screenRect) {
+            addCursorRect(divider.touchRect, cursor: divider.axis == .vertical ? .resizeLeftRight : .resizeUpDown)
+        }
+        addCursorRect(parkedDividerRect(axis: .horizontal, in: bounds.insetBy(dx: 8, dy: 8)).insetBy(dx: -6, dy: -6), cursor: .openHand)
+        addCursorRect(parkedDividerRect(axis: .vertical, in: bounds.insetBy(dx: 8, dy: 8)).insetBy(dx: -6, dy: -6), cursor: .openHand)
     }
 
     // MARK: - Mouse Handling
@@ -1180,8 +1639,6 @@ private final class LayoutPreviewView: NSView {
         guard let layout else { return }
         let location = convert(event.locationInWindow, from: nil)
         let screenRect = bounds.insetBy(dx: 16, dy: 22)
-        let isAdditiveSelection = event.modifierFlags.contains(.command)
-        dragStartPoint = location
         pendingSplitDrop = nil
 
         if isEditableLayout, let sourceAxis = parkedDividerAxis(at: location, in: bounds.insetBy(dx: 8, dy: 8)) {
@@ -1194,35 +1651,22 @@ private final class LayoutPreviewView: NSView {
 
         activeDivider = dividerHits(for: layout, in: screenRect).first(where: { $0.touchRect.contains(location) })
         if let activeDivider {
-            selectedRegionIDs = [activeDivider.firstRegionID, activeDivider.secondRegionID]
+            currentDividerRatio = nil
+            selectedRegionIDs = activeDivider.regionIDs
             return
         }
 
         for region in layout.regions {
             let r = rect(for: region.normalizedFrame, in: screenRect)
             if r.contains(location) {
-                if isAdditiveSelection {
-                    if let existingIndex = selectedRegionIDs.firstIndex(of: region.id) {
-                        selectedRegionIDs.remove(at: existingIndex)
-                    } else {
-                        selectedRegionIDs.append(region.id)
-                        if selectedRegionIDs.count > 2 {
-                            selectedRegionIDs.removeFirst(selectedRegionIDs.count - 2)
-                        }
-                    }
-                    if selectedRegionIDs.isEmpty {
-                        selectedRegionIDs = [region.id]
-                    }
-                } else {
-                    selectedRegionIDs = [region.id]
-                }
+                selectedRegionIDs = [region.id]
                 return
             }
         }
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let layout, let dragStartPoint else { return }
+        guard let layout else { return }
         if isDraggingSplitSource {
             let current = convert(event.locationInWindow, from: nil)
             splitSourceDragPoint = current
@@ -1242,39 +1686,23 @@ private final class LayoutPreviewView: NSView {
                 let value = max(activeDivider.ratioSpan.lowerBound, min(activeDivider.ratioSpan.upperBound, current.y))
                 ratio = (value - activeDivider.ratioSpan.lowerBound) / max(1, activeDivider.ratioSpan.upperBound - activeDivider.ratioSpan.lowerBound)
             }
-            onDividerRatioChanged?(activeDivider.firstRegionID, activeDivider.secondRegionID, ratio)
-            self.activeDivider = dividerHits(for: layout, in: screenRect).first(where: { Set([$0.firstRegionID, $0.secondRegionID]) == Set(selectedRegionIDs) })
+            currentDividerRatio = ratio
+            onDividerRatioChanged?(activeDivider.firstRegionIDs, activeDivider.secondRegionIDs, activeDivider.axis, ratio)
+            self.activeDivider = dividerHits(for: layout, in: screenRect).first(where: { Set($0.regionIDs) == Set(selectedRegionIDs) })
             needsDisplay = true
-            return
-        }
-        let current = convert(event.locationInWindow, from: nil)
-        let selectionRect = NSRect(
-            x: min(dragStartPoint.x, current.x),
-            y: min(dragStartPoint.y, current.y),
-            width: abs(current.x - dragStartPoint.x),
-            height: abs(current.y - dragStartPoint.y)
-        )
-        guard selectionRect.width > 6 || selectionRect.height > 6 else { return }
-
-        let screenRect = bounds.insetBy(dx: 16, dy: 22)
-        let selected = layout.regions.compactMap { region -> (Int, CGFloat)? in
-            let regionRect = rect(for: region.normalizedFrame, in: screenRect)
-            let intersection = selectionRect.intersection(regionRect)
-            guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else { return nil }
-            return (region.id, intersection.width * intersection.height)
-        }
-            .sorted { $0.1 > $1.1 }
-            .map(\.0)
-
-        let topTwo = Array(selected.prefix(2))
-        if !topTwo.isEmpty, topTwo != selectedRegionIDs {
-            selectedRegionIDs = topTwo
-            onDragSelectionChanged?(topTwo)
         }
     }
 
     override func mouseUp(with event: NSEvent) {
         super.mouseUp(with: event)
+        if let activeDivider, let currentDividerRatio {
+            onDividerInteractionEnded?(
+                activeDivider.firstRegionIDs,
+                activeDivider.secondRegionIDs,
+                activeDivider.axis,
+                currentDividerRatio
+            )
+        }
         if isDraggingSplitSource, let pendingSplitDrop {
             onSplitRequested?(pendingSplitDrop.regionID, pendingSplitDrop.axis, pendingSplitDrop.ratio)
         }
@@ -1282,7 +1710,7 @@ private final class LayoutPreviewView: NSView {
         splitSourceAxis = nil
         splitSourceDragPoint = nil
         pendingSplitDrop = nil
-        dragStartPoint = nil
+        currentDividerRatio = nil
         activeDivider = nil
         needsDisplay = true
     }
@@ -1299,9 +1727,11 @@ private final class LayoutPreviewView: NSView {
     }
 
     private func displayPercentageLabel(for frame: CGRect, axis: SplitAxis) -> String {
-        let widthPercent = Int(round(frame.width * 100))
-        let heightPercent = Int(round(frame.height * 100))
-        return axis == .vertical ? "\(widthPercent)%" : "\(heightPercent)%"
+        let widthPercent = frame.width * 100
+        let heightPercent = frame.height * 100
+        return axis == .vertical
+            ? String(format: "%.0f%%", widthPercent)
+            : String(format: "%.0f%%", heightPercent)
     }
 
     private var splitSourceAxis: SplitAxis?
@@ -1327,16 +1757,16 @@ private final class LayoutPreviewView: NSView {
     private func drawParkedDivider(axis: SplitAxis, in canvas: NSRect) {
         let handleRect = parkedDividerRect(axis: axis, in: canvas)
         let bodyPath = NSBezierPath(roundedRect: handleRect, xRadius: 5, yRadius: 5)
-        NSColor.windowBackgroundColor.withAlphaComponent(0.9).setFill()
+        NSColor.windowBackgroundColor.withAlphaComponent(layoutOverlayControlAlpha).setFill()
         bodyPath.fill()
-        NSColor.separatorColor.setStroke()
+        NSColor.separatorColor.withAlphaComponent(layoutOverlayBorderAlpha).setStroke()
         bodyPath.lineWidth = 1
         bodyPath.stroke()
 
         let iconName = axis == .horizontal ? "arrow.down" : "arrow.right"
         if let icon = NSImage(systemSymbolName: iconName, accessibilityDescription: "Split Divider") {
             let iconRect = handleRect.insetBy(dx: 3, dy: 3)
-            icon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 0.85)
+            icon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 0.62)
         }
     }
 
@@ -1375,71 +1805,123 @@ private final class LayoutPreviewView: NSView {
     // resizing, splitting, and merging always work from the current layout geometry.
     private func dividerHits(for layout: RegionLayout, in screenRect: NSRect) -> [DividerHit] {
         let epsilon: CGFloat = 0.001
-        let touch: CGFloat = 8
+        let touch: CGFloat = 12
         var results: [DividerHit] = []
+        var seenKeys = Set<String>()
 
-        for i in 0 ..< layout.regions.count {
-            for j in (i + 1) ..< layout.regions.count {
-                let a = layout.regions[i]
-                let b = layout.regions[j]
-                let af = a.normalizedFrame
-                let bf = b.normalizedFrame
+        let verticalBoundaries = uniqueBoundaries(
+            layout.regions.flatMap { [$0.normalizedFrame.minX, $0.normalizedFrame.maxX] },
+            excluding: [0, 1],
+            epsilon: epsilon
+        )
+        for boundaryX in verticalBoundaries {
+            let leftRegions = layout.regions.filter { abs($0.normalizedFrame.maxX - boundaryX) < epsilon }
+            let rightRegions = layout.regions.filter { abs($0.normalizedFrame.minX - boundaryX) < epsilon }
+            guard !leftRegions.isEmpty, !rightRegions.isEmpty else { continue }
 
-                let sameMinY = abs(af.minY - bf.minY) < epsilon
-                let sameHeight = abs(af.height - bf.height) < epsilon
-                let sideBySide = abs(af.maxX - bf.minX) < epsilon || abs(bf.maxX - af.minX) < epsilon
-                if sameMinY && sameHeight && sideBySide {
-                    let aRect = rect(for: af, in: screenRect)
-                    let bRect = rect(for: bf, in: screenRect)
-                    let leftIsA = af.minX < bf.minX
-                    let leftRect = leftIsA ? aRect : bRect
-                    let rightRect = leftIsA ? bRect : aRect
-                    let x = leftRect.maxX
-                    let line = NSRect(x: x - 1, y: max(leftRect.minY, rightRect.minY), width: 2, height: min(leftRect.maxY, rightRect.maxY) - max(leftRect.minY, rightRect.minY))
-                    guard line.height > 3 else { continue }
-                    let touchRect = line.insetBy(dx: -touch, dy: 0)
-                    let span = leftRect.minX ... rightRect.maxX
-                    results.append(
-                        DividerHit(
-                            firstRegionID: leftIsA ? a.id : b.id,
-                            secondRegionID: leftIsA ? b.id : a.id,
-                            axis: .vertical,
-                            lineRect: line,
-                            touchRect: touchRect,
-                            ratioSpan: span
-                        )
-                    )
-                    continue
-                }
-
-                let sameMinX = abs(af.minX - bf.minX) < epsilon
-                let sameWidth = abs(af.width - bf.width) < epsilon
-                let stacked = abs(af.maxY - bf.minY) < epsilon || abs(bf.maxY - af.minY) < epsilon
-                if sameMinX && sameWidth && stacked {
-                    let aRect = rect(for: af, in: screenRect)
-                    let bRect = rect(for: bf, in: screenRect)
-                    let bottomIsA = af.minY < bf.minY
-                    let bottomRect = bottomIsA ? aRect : bRect
-                    let topRect = bottomIsA ? bRect : aRect
-                    let y = bottomRect.maxY
-                    let line = NSRect(x: max(bottomRect.minX, topRect.minX), y: y - 1, width: min(bottomRect.maxX, topRect.maxX) - max(bottomRect.minX, topRect.minX), height: 2)
-                    guard line.width > 3 else { continue }
-                    let touchRect = line.insetBy(dx: 0, dy: -touch)
-                    let span = bottomRect.minY ... topRect.maxY
-                    results.append(
-                        DividerHit(
-                            firstRegionID: bottomIsA ? a.id : b.id,
-                            secondRegionID: bottomIsA ? b.id : a.id,
-                            axis: .horizontal,
-                            lineRect: line,
-                            touchRect: touchRect,
-                            ratioSpan: span
-                        )
-                    )
+            var minY = CGFloat.greatestFiniteMagnitude
+            var maxY = -CGFloat.greatestFiniteMagnitude
+            for left in leftRegions {
+                for right in rightRegions {
+                    let overlapMin = max(left.normalizedFrame.minY, right.normalizedFrame.minY)
+                    let overlapMax = min(left.normalizedFrame.maxY, right.normalizedFrame.maxY)
+                    guard overlapMax - overlapMin > epsilon else { continue }
+                    minY = min(minY, overlapMin)
+                    maxY = max(maxY, overlapMax)
                 }
             }
+            guard maxY > minY else { continue }
+
+            let firstIDs = leftRegions.map(\.id).sorted()
+            let secondIDs = rightRegions.map(\.id).sorted()
+            let key = dividerKey(axis: .vertical, firstIDs: firstIDs, secondIDs: secondIDs)
+            guard !seenKeys.contains(key) else { continue }
+            seenKeys.insert(key)
+
+            let x = screenRect.minX + (screenRect.width * boundaryX)
+            let y = screenRect.minY + (screenRect.height * minY)
+            let height = screenRect.height * (maxY - minY)
+            guard height > 3 else { continue }
+            let line = NSRect(x: x - 1, y: y, width: 2, height: height)
+            let unionMinX = (leftRegions + rightRegions).map(\.normalizedFrame.minX).min() ?? 0
+            let unionMaxX = (leftRegions + rightRegions).map(\.normalizedFrame.maxX).max() ?? 1
+            let span = (screenRect.minX + (screenRect.width * unionMinX)) ... (screenRect.minX + (screenRect.width * unionMaxX))
+            results.append(
+                DividerHit(
+                    firstRegionIDs: firstIDs,
+                    secondRegionIDs: secondIDs,
+                    axis: .vertical,
+                    lineRect: line,
+                    touchRect: line.insetBy(dx: -touch, dy: 0),
+                    ratioSpan: span
+                )
+            )
+        }
+
+        let horizontalBoundaries = uniqueBoundaries(
+            layout.regions.flatMap { [$0.normalizedFrame.minY, $0.normalizedFrame.maxY] },
+            excluding: [0, 1],
+            epsilon: epsilon
+        )
+        for boundaryY in horizontalBoundaries {
+            let bottomRegions = layout.regions.filter { abs($0.normalizedFrame.maxY - boundaryY) < epsilon }
+            let topRegions = layout.regions.filter { abs($0.normalizedFrame.minY - boundaryY) < epsilon }
+            guard !bottomRegions.isEmpty, !topRegions.isEmpty else { continue }
+
+            var minX = CGFloat.greatestFiniteMagnitude
+            var maxX = -CGFloat.greatestFiniteMagnitude
+            for bottom in bottomRegions {
+                for top in topRegions {
+                    let overlapMin = max(bottom.normalizedFrame.minX, top.normalizedFrame.minX)
+                    let overlapMax = min(bottom.normalizedFrame.maxX, top.normalizedFrame.maxX)
+                    guard overlapMax - overlapMin > epsilon else { continue }
+                    minX = min(minX, overlapMin)
+                    maxX = max(maxX, overlapMax)
+                }
+            }
+            guard maxX > minX else { continue }
+
+            let firstIDs = bottomRegions.map(\.id).sorted()
+            let secondIDs = topRegions.map(\.id).sorted()
+            let key = dividerKey(axis: .horizontal, firstIDs: firstIDs, secondIDs: secondIDs)
+            guard !seenKeys.contains(key) else { continue }
+            seenKeys.insert(key)
+
+            let x = screenRect.minX + (screenRect.width * minX)
+            let y = screenRect.minY + (screenRect.height * boundaryY)
+            let width = screenRect.width * (maxX - minX)
+            guard width > 3 else { continue }
+            let line = NSRect(x: x, y: y - 1, width: width, height: 2)
+            let unionMinY = (bottomRegions + topRegions).map(\.normalizedFrame.minY).min() ?? 0
+            let unionMaxY = (bottomRegions + topRegions).map(\.normalizedFrame.maxY).max() ?? 1
+            let span = (screenRect.minY + (screenRect.height * unionMinY)) ... (screenRect.minY + (screenRect.height * unionMaxY))
+            results.append(
+                DividerHit(
+                    firstRegionIDs: firstIDs,
+                    secondRegionIDs: secondIDs,
+                    axis: .horizontal,
+                    lineRect: line,
+                    touchRect: line.insetBy(dx: 0, dy: -touch),
+                    ratioSpan: span
+                )
+            )
         }
         return results
+    }
+
+    private func uniqueBoundaries(_ values: [CGFloat], excluding excluded: [CGFloat], epsilon: CGFloat) -> [CGFloat] {
+        var result: [CGFloat] = []
+        for value in values.sorted() {
+            guard !excluded.contains(where: { abs($0 - value) < epsilon }) else { continue }
+            guard !result.contains(where: { abs($0 - value) < epsilon }) else { continue }
+            result.append(value)
+        }
+        return result
+    }
+
+    private func dividerKey(axis: SplitAxis, firstIDs: [Int], secondIDs: [Int]) -> String {
+        let axisKey = axis == .vertical ? "v" : "h"
+        return "\(axisKey):\(firstIDs.map(String.init).joined(separator: ","))|\(secondIDs.map(String.init).joined(separator: ","))"
     }
 }
 
@@ -1448,7 +1930,8 @@ private final class DebugSettingsViewController: NSViewController {
     private let onDebugLoggingChanged: (Bool) -> Void
 
     private let checkbox = NSButton(checkboxWithTitle: "Enable debug logging", target: nil, action: nil)
-    private let infoLabel = NSTextField(wrappingLabelWithString: "Write snap diagnostics to the PanePilot log file.")
+    private let infoLabel = secondaryLabel("Write snap diagnostics to the PanePilot log file.")
+    private let logLocationLabel = secondaryLabel()
     private let openLogsButton = NSButton(title: "Open Logs Folder", target: nil, action: nil)
 
     // MARK: - Initialization
@@ -1476,6 +1959,8 @@ private final class DebugSettingsViewController: NSViewController {
 
     func refreshState() {
         checkbox.state = DebugLogger.shared.isEnabled() ? .on : .off
+        let logPath = NSString(string: DebugLogger.shared.logFileURL.path).abbreviatingWithTildeInPath
+        logLocationLabel.stringValue = "Log file: \(logPath)"
     }
 
     // MARK: - Layout
@@ -1485,10 +1970,6 @@ private final class DebugSettingsViewController: NSViewController {
         checkbox.target = self
         checkbox.action = #selector(toggleLogging)
 
-        infoLabel.translatesAutoresizingMaskIntoConstraints = false
-        infoLabel.textColor = .secondaryLabelColor
-        infoLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-
         openLogsButton.translatesAutoresizingMaskIntoConstraints = false
         openLogsButton.bezelStyle = .rounded
         openLogsButton.target = self
@@ -1496,6 +1977,7 @@ private final class DebugSettingsViewController: NSViewController {
 
         view.addSubview(checkbox)
         view.addSubview(infoLabel)
+        view.addSubview(logLocationLabel)
         view.addSubview(openLogsButton)
 
         NSLayoutConstraint.activate([
@@ -1506,7 +1988,11 @@ private final class DebugSettingsViewController: NSViewController {
             infoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
             infoLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
-            openLogsButton.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 16),
+            logLocationLabel.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 14),
+            logLocationLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
+            logLocationLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+
+            openLogsButton.topAnchor.constraint(equalTo: logLocationLabel.bottomAnchor, constant: 16),
             openLogsButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
         ])
     }
@@ -1579,13 +2065,12 @@ private final class AboutSettingsViewController: NSViewController {
         let rightColumn = NSStackView()
         rightColumn.orientation = .vertical
         rightColumn.alignment = .leading
-        rightColumn.spacing = 0
+        rightColumn.spacing = 5
 
         let legalLabel = NSTextField(
             wrappingLabelWithString: """
             License: AGPL-3.0-only.
             Source and distributed binaries use the same license.
-            Copyright © 2026 Joakim and contributors.
             """
         )
         legalLabel.textColor = .secondaryLabelColor
@@ -1593,7 +2078,24 @@ private final class AboutSettingsViewController: NSViewController {
         legalLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
         legalLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        let copyrightRow = NSStackView()
+        copyrightRow.orientation = .horizontal
+        copyrightRow.alignment = .firstBaseline
+        copyrightRow.spacing = 3
+
+        let copyrightLabel = NSTextField(labelWithString: "Copyright © 2026")
+        copyrightLabel.textColor = .secondaryLabelColor
+        copyrightLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+
+        let profileButton = makeLinkButton(title: "Joakim Persson", url: "https://github.com/hansjoakimpersson")
+        let websiteButton = makeLinkButton(title: "PanePilot website", url: "https://hansjoakimpersson.github.io/PanePilot/")
+
+        copyrightRow.addArrangedSubview(copyrightLabel)
+        copyrightRow.addArrangedSubview(profileButton)
+
         rightColumn.addArrangedSubview(legalLabel)
+        rightColumn.addArrangedSubview(copyrightRow)
+        rightColumn.addArrangedSubview(websiteButton)
 
         container.addArrangedSubview(leftColumn)
         container.addArrangedSubview(divider)
@@ -1604,13 +2106,33 @@ private final class AboutSettingsViewController: NSViewController {
         NSLayoutConstraint.activate([
             iconView.widthAnchor.constraint(equalToConstant: 50),
             iconView.heightAnchor.constraint(equalToConstant: 50),
-            divider.heightAnchor.constraint(equalToConstant: 78),
-            leftColumn.widthAnchor.constraint(equalToConstant: 190),
-            legalLabel.widthAnchor.constraint(equalToConstant: 175),
+            divider.heightAnchor.constraint(equalToConstant: 96),
+            leftColumn.widthAnchor.constraint(equalToConstant: 156),
+            legalLabel.widthAnchor.constraint(equalToConstant: 200),
             container.topAnchor.constraint(equalTo: view.topAnchor, constant: 24),
             container.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
             container.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
         ])
+    }
+
+    private func makeLinkButton(title: String, url: String) -> NSButton {
+        let button = NSButton(title: title, target: self, action: #selector(openLink(_:)))
+        button.bezelStyle = .inline
+        button.isBordered = false
+        button.alignment = .left
+        button.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        button.contentTintColor = .linkColor
+        button.toolTip = url
+        button.setAccessibilityLabel(title)
+        button.identifier = NSUserInterfaceItemIdentifier(url)
+        return button
+    }
+
+    @objc
+    private func openLink(_ sender: NSButton) {
+        guard let rawValue = sender.identifier?.rawValue,
+              let url = URL(string: rawValue) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private var applicationVersion: String {
