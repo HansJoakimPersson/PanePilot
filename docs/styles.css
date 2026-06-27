@@ -12,6 +12,7 @@
   --yellow: #d6a12b;
   --shadow: 0 22px 54px rgba(24, 43, 54, 0.16);
   --max: 1180px;
+  --header-height: 64px;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -51,7 +52,7 @@ a {
   top: 0;
   left: 0;
   width: 100%;
-  height: 64px;
+  height: var(--header-height);
   padding: 0 max(16px, calc((100% - var(--max)) / 2));
   display: flex;
   align-items: center;
@@ -156,18 +157,33 @@ nav a:hover,
 
 .hero {
   position: relative;
-  min-height: min(860px, 88svh);
+  min-height: min(796px, calc(88svh - var(--header-height)));
+  margin-top: var(--header-height);
   overflow: hidden;
-  background: #e9edef;
+  background: #eef3f5;
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("./assets/panepilot-hero.png");
+  background-size: cover;
+  background-position: center;
+  opacity: 0.18;
+  filter: blur(18px);
+  transform: scale(1.04);
 }
 
 .hero-image {
   position: absolute;
-  inset: 0;
+  inset: 0 auto 0 50%;
   width: 100%;
+  max-width: 1672px;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
+  transform: translateX(-50%);
 }
 
 .hero-shade {
@@ -823,7 +839,38 @@ footer > p {
   }
 
   .hero {
-    min-height: 820px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 34px;
+    padding: 110px 0 76px;
+  }
+
+  .hero::before {
+    opacity: 0.16;
+  }
+
+  .hero-image {
+    position: relative;
+    z-index: 1;
+    order: 1;
+    inset: auto;
+    width: min(calc(100% - 36px), 860px);
+    max-width: none;
+    height: auto;
+    aspect-ratio: 1672 / 941;
+    margin: 0 auto;
+    object-position: center;
+    transform: none;
+  }
+
+  .hero-shade {
+    display: none;
+  }
+
+  .hero-content {
+    order: 2;
+    padding-top: 0;
   }
 
   h1 {
@@ -832,15 +879,6 @@ footer > p {
 
   h2 {
     font-size: 3.2rem;
-  }
-
-  .hero-image {
-    object-position: 62% center;
-  }
-
-  .hero-shade {
-    background: rgba(245, 248, 249, 0.72);
-    clip-path: polygon(0 0, 78% 0, 63% 100%, 0 100%);
   }
 
   .feature,
@@ -904,8 +942,11 @@ footer > p {
 }
 
 @media (max-width: 620px) {
+  :root {
+    --header-height: 58px;
+  }
+
   .site-header {
-    height: 58px;
     padding-inline: 10px;
   }
 
@@ -960,21 +1001,12 @@ footer > p {
   }
 
   .hero {
-    min-height: 760px;
+    gap: 26px;
+    padding: 82px 0 66px;
   }
 
   .hero-image {
-    object-position: 67% center;
-  }
-
-  .hero-shade {
-    background: rgba(245, 248, 249, 0.84);
-    clip-path: polygon(0 0, 100% 0, 100% 63%, 0 76%);
-    backdrop-filter: blur(2px);
-  }
-
-  .hero-content {
-    padding-top: 112px;
+    width: 100%;
   }
 
   .hero-content > * {

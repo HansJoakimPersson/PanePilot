@@ -11,7 +11,7 @@
 
 PanePilot is a macOS menu bar utility for snapping windows into visual layouts. Hold your chosen drag modifier to open a compact layout picker, hover a zone to preview the result, and release to place the window. You can also use Keyboard Snap to choose a layout and zone with number keys.
 
-![PanePilot icon](docs/assets/panepilot-icon.svg)
+<img src="docs/assets/panepilot-icon.svg" width="96" alt="PanePilot icon">
 
 ## System Requirements
 
