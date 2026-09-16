@@ -109,3 +109,18 @@ final class KeyboardSnapKeyInputTests: XCTestCase {
         )
     }
 }
+
+final class ReliabilityPolicyTests: XCTestCase {
+    func testRetriesTransientAccessibilityFailureOnlyOnce() {
+        let error = AppError.axOperationFailed("set size", .failure)
+
+        XCTAssertTrue(AXRetryPolicy.shouldRetry(error: error, attempt: 0))
+        XCTAssertFalse(AXRetryPolicy.shouldRetry(error: error, attempt: 1))
+    }
+
+    func testDoesNotRetryInvalidArguments() {
+        let error = AppError.invalidArguments("invalid frame")
+
+        XCTAssertFalse(AXRetryPolicy.shouldRetry(error: error, attempt: 0))
+    }
+}

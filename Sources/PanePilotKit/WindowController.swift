@@ -41,6 +41,45 @@ struct FocusedWindowSnapshot {
     let minimized: Bool
 }
 
+/// Converts between AppKit's bottom-left screen coordinates and AX's top-left
+/// coordinates. AX uses the primary display's top edge as its vertical reference;
+/// the union of all display frames is not a valid reference when displays are
+/// arranged above or below the primary display.
+enum WindowCoordinateSpace {
+    static func axOrigin(forAppKitFrame frame: CGRect, primaryScreenFrame: CGRect) -> CGPoint {
+        CGPoint(x: frame.minX, y: primaryScreenFrame.maxY - frame.maxY)
+    }
+
+    static func appKitFrame(
+        axOrigin: CGPoint,
+        size: CGSize,
+        primaryScreenFrame: CGRect
+    ) -> CGRect {
+        CGRect(
+            x: axOrigin.x,
+            y: primaryScreenFrame.maxY - axOrigin.y - size.height,
+            width: size.width,
+            height: size.height
+        )
+    }
+}
+
+/// Limits retries to transient, generic AX failures. Reusing the same AX element
+/// after an invalid-element error would not recover and could hide a stale snapshot.
+enum AXRetryPolicy {
+    static func shouldRetry(error: Error, attempt: Int) -> Bool {
+        guard attempt == 0,
+              case let AppError.axOperationFailed(_, axError) = error else {
+            return false
+        }
+
+        if case .failure = axError {
+            return true
+        }
+        return false
+    }
+}
+
 /// Reads and writes window geometry via the macOS Accessibility API.
 ///
 /// `WindowController` is a stateless struct — all operations take explicit inputs and return
@@ -95,9 +134,22 @@ struct WindowController {
     /// detect if the app clamped the size.
     /// - Throws: `AppError.axOperationFailed` if either AX write fails.
     func moveWindow(_ snapshot: FocusedWindowSnapshot, to frame: CGRect) throws -> WindowDebugInfo {
-        try setPosition(windowElement: snapshot.element, frame: frame)
-        try setSize(windowElement: snapshot.element, frame: frame)
-        let finalFrame = frameOfWindowElement(snapshot.element)
+        var attempt = 0
+        let finalFrame: CGRect
+        while true {
+            do {
+                try setPosition(windowElement: snapshot.element, frame: frame)
+                try setSize(windowElement: snapshot.element, frame: frame)
+                finalFrame = frameOfWindowElement(snapshot.element)
+                break
+            } catch {
+                guard AXRetryPolicy.shouldRetry(error: error, attempt: attempt) else {
+                    throw error
+                }
+                attempt += 1
+                DebugLogger.shared.warn("AX window move transient failure; retrying once.")
+            }
+        }
 
         return WindowDebugInfo(
             pid: snapshot.pid,
@@ -192,10 +244,16 @@ struct WindowController {
 
     // MARK: - AX Reads
 
-    private func snapshot(windowElement: AXUIElement, pid: pid_t) -> FocusedWindowSnapshot {
+    private func snapshot(windowElement: AXUIElement, pid: pid_t) -> FocusedWindowSnapshot? {
         let running = NSRunningApplication(processIdentifier: pid)
         let position = pointAttribute(kAXPositionAttribute as String, from: windowElement)
         let size = sizeAttribute(kAXSizeAttribute as String, from: windowElement)
+        let frame = appKitFrame(axOrigin: position, size: size)
+        guard frame.width > 0, frame.height > 0,
+              frame.minX.isFinite, frame.minY.isFinite,
+              frame.width.isFinite, frame.height.isFinite else {
+            return nil
+        }
 
         return FocusedWindowSnapshot(
             element: windowElement,
@@ -205,7 +263,7 @@ struct WindowController {
             windowTitle: stringAttribute(kAXTitleAttribute as String, from: windowElement),
             role: stringAttribute(kAXRoleAttribute as String, from: windowElement),
             subrole: stringAttribute(kAXSubroleAttribute as String, from: windowElement),
-            frame: appKitFrame(axOrigin: position, size: size),
+            frame: frame,
             positionSettable: isSettable(attribute: kAXPositionAttribute as String, on: windowElement),
             sizeSettable: isSettable(attribute: kAXSizeAttribute as String, on: windowElement),
             minimized: boolAttribute(kAXMinimizedAttribute as String, from: windowElement)
@@ -277,26 +335,21 @@ struct WindowController {
     }
 
     private func appKitFrame(axOrigin: CGPoint, size: CGSize) -> CGRect {
-        let desktop = desktopFrame()
-        return CGRect(
-            x: axOrigin.x,
-            y: desktop.maxY - axOrigin.y - size.height,
-            width: size.width,
-            height: size.height
+        WindowCoordinateSpace.appKitFrame(
+            axOrigin: axOrigin,
+            size: size,
+            primaryScreenFrame: primaryScreenFrame()
         )
     }
 
     private func axOrigin(forAppKitFrame frame: CGRect) -> CGPoint {
-        let desktop = desktopFrame()
-        return CGPoint(
-            x: frame.origin.x,
-            y: desktop.maxY - frame.maxY
+        WindowCoordinateSpace.axOrigin(
+            forAppKitFrame: frame,
+            primaryScreenFrame: primaryScreenFrame()
         )
     }
 
-    private func desktopFrame() -> CGRect {
-        NSScreen.screens.map(\.frame).reduce(.null) { partial, frame in
-            partial.union(frame)
-        }
+    private func primaryScreenFrame() -> CGRect {
+        NSScreen.screens.first?.frame ?? .zero
     }
 }

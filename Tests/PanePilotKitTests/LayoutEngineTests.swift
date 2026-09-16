@@ -67,4 +67,30 @@ final class LayoutEngineTests: XCTestCase {
         XCTAssertEqual(frame.width, frame.width.rounded())
         XCTAssertEqual(frame.height, frame.height.rounded())
     }
+
+    // MARK: - Accessibility Coordinate Space
+
+    func testAccessibilityOriginUsesPrimaryScreenAsVerticalReference() {
+        let primary = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let appKitFrame = CGRect(x: 0, y: 900, width: 960, height: 540)
+
+        let axOrigin = WindowCoordinateSpace.axOrigin(
+            forAppKitFrame: appKitFrame,
+            primaryScreenFrame: primary
+        )
+
+        XCTAssertEqual(axOrigin, CGPoint(x: 0, y: -540))
+    }
+
+    func testAccessibilityOriginPreservesNegativeCoordinatesBelowPrimaryScreen() {
+        let primary = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let appKitFrame = CGRect(x: -1920, y: -1080, width: 960, height: 540)
+
+        let axOrigin = WindowCoordinateSpace.axOrigin(
+            forAppKitFrame: appKitFrame,
+            primaryScreenFrame: primary
+        )
+
+        XCTAssertEqual(axOrigin, CGPoint(x: -1920, y: 1440))
+    }
 }

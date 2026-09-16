@@ -1,5 +1,6 @@
 import AppKit
 @preconcurrency import CoreGraphics
+import ApplicationServices
 import Foundation
 
 /// Filters keyboard events before they reach the frontmost application.
@@ -10,15 +11,28 @@ import Foundation
 final class KeyboardEventInterceptor {
     typealias KeyDownHandler = @MainActor (_ keyCode: UInt16, _ modifiers: NSEvent.ModifierFlags) -> Bool
 
+    enum StartResult {
+        case started
+        case accessibilityUnavailable
+        case creationFailed
+    }
+
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var keyDownHandler: KeyDownHandler?
     private var suppressedKeyCodes: Set<UInt16> = []
 
     @discardableResult
-    func start(handler: @escaping KeyDownHandler) -> Bool {
+    func start(handler: @escaping KeyDownHandler) -> StartResult {
         stop()
         keyDownHandler = handler
+
+        let options = ["AXTrustedCheckOptionPrompt": false] as CFDictionary
+        guard AXIsProcessTrustedWithOptions(options) else {
+            DebugLogger.shared.info("KeyboardEventInterceptor: event tap deferred until Accessibility permission is granted.")
+            keyDownHandler = nil
+            return .accessibilityUnavailable
+        }
 
         let eventMask = eventMask(for: [.keyDown, .keyUp])
         let userInfo = Unmanaged.passUnretained(self).toOpaque()
@@ -30,9 +44,9 @@ final class KeyboardEventInterceptor {
             callback: Self.eventTapCallback,
             userInfo: userInfo
         ) else {
-            DebugLogger.shared.error("KeyboardEventInterceptor: unable to create event tap — accessibility permission may be missing.")
+            DebugLogger.shared.error("KeyboardEventInterceptor: unable to create event tap after Accessibility permission was granted.")
             keyDownHandler = nil
-            return false
+            return .creationFailed
         }
 
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
@@ -42,7 +56,7 @@ final class KeyboardEventInterceptor {
         self.eventTap = eventTap
         runLoopSource = source
         DebugLogger.shared.info("KeyboardEventInterceptor: event tap started.")
-        return true
+        return .started
     }
 
     func stop() {
@@ -64,7 +78,7 @@ final class KeyboardEventInterceptor {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout {
-            DebugLogger.shared.error("KeyboardEventInterceptor: tap disabled by timeout — re-enabling.")
+            DebugLogger.shared.warn("KeyboardEventInterceptor: tap disabled by timeout — re-enabling.")
             if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
             return Unmanaged.passUnretained(event)
         }

@@ -197,13 +197,16 @@ final class DragSnapController {
             handler: { [weak self] event in self?.handle(event: event); return event }
         )
 
-        let keyboardInterceptionStarted = keyboardEventInterceptor.start { [weak self] keyCode, modifiers in
+        let keyboardInterceptionResult = keyboardEventInterceptor.start { [weak self] keyCode, modifiers in
             self?.handleKeyboardKeyDown(keyCode: keyCode, modifierFlags: modifiers) ?? false
         }
-        if keyboardInterceptionStarted {
+        switch keyboardInterceptionResult {
+        case .started:
             logger.info("Keyboard event interception started.")
-        } else {
-            logger.error("Keyboard snap unavailable: unable to create an Accessibility event tap.")
+        case .accessibilityUnavailable:
+            logger.info("Keyboard snap deferred until Accessibility permission is granted.")
+        case .creationFailed:
+            logger.error("Keyboard snap unavailable: unable to create an Accessibility event tap after permission was granted.")
         }
     }
 
