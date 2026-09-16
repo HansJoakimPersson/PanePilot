@@ -33,6 +33,8 @@ final class RegionLayoutsTests: XCTestCase {
 
         XCTAssertEqual(layout.regions.count, 3)
         XCTAssertEqual(totalWidth, 1.0, accuracy: 0.0001)
+        XCTAssertEqual(layout.regions.map(\.name), ["Left Column", "Center Column", "Right Column"])
+        XCTAssertEqual(layout.regions.map(\.id), [1, 2, 3])
     }
 
     func testWidescreenLeftKeepsMainPaneDominant() throws {
@@ -47,6 +49,17 @@ final class RegionLayoutsTests: XCTestCase {
         XCTAssertEqual(stackedHeight, 1.0, accuracy: 0.0001)
     }
 
+    func testWidescreenLeftNumbersMainPaneBeforeRightStackTopToBottom() throws {
+        let layout = try XCTUnwrap(RegionLayouts.find(by: "widescreen-tall"))
+        let mainPane = try XCTUnwrap(layout.regions.first(where: { $0.name == "Main Pane" }))
+        let upperPane = try XCTUnwrap(layout.regions.first(where: { $0.name == "Upper Stack" }))
+        let lowerPane = try XCTUnwrap(layout.regions.first(where: { $0.name == "Lower Stack" }))
+
+        XCTAssertEqual(mainPane.id, 1)
+        XCTAssertEqual(upperPane.id, 2)
+        XCTAssertEqual(lowerPane.id, 3)
+    }
+
     func testWidescreenMirrorKeepsMainPaneDominant() throws {
         let layout = try XCTUnwrap(RegionLayouts.find(by: "widescreen-tall-mirror"))
         let mainPane = try XCTUnwrap(layout.regions.first(where: { $0.name == "Main Pane" }))
@@ -58,5 +71,17 @@ final class RegionLayoutsTests: XCTestCase {
         XCTAssertGreaterThan(mainPane.normalizedFrame.width, 0.5)
         XCTAssertEqual(mainPane.normalizedFrame.maxX, 1.0, accuracy: 0.0001)
         XCTAssertEqual(stackedHeight, 1.0, accuracy: 0.0001)
+    }
+
+    func testWidescreenMirrorNumbersLeftStackTopToBottomBeforeMainPane() throws {
+        let layout = try XCTUnwrap(RegionLayouts.find(by: "widescreen-tall-mirror"))
+        let upperPane = try XCTUnwrap(layout.regions.first(where: { $0.name == "Upper Stack" }))
+        let lowerPane = try XCTUnwrap(layout.regions.first(where: { $0.name == "Lower Stack" }))
+
+        let mainPane = try XCTUnwrap(layout.regions.first(where: { $0.name == "Main Pane" }))
+
+        XCTAssertEqual(upperPane.id, 1)
+        XCTAssertEqual(lowerPane.id, 2)
+        XCTAssertEqual(mainPane.id, 3)
     }
 }

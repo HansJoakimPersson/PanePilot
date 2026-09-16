@@ -60,6 +60,7 @@ final class DisplayLayoutStore {
     private var recordsByID: [String: DisplayRecord] = [:]
     private var layoutsByID: [String: RegionLayout] = [:]
     private var catalogEntries: [PersistedLayoutCatalogEntry] = []
+    private var layoutsNeedMigrationPersistence = false
     private let builtInLayoutIDs: Set<String>
 
     // MARK: - Initialization
@@ -82,6 +83,10 @@ final class DisplayLayoutStore {
         loadCatalog()
         reconcileCatalog()
         load()
+        if layoutsNeedMigrationPersistence {
+            persistLayouts()
+            layoutsNeedMigrationPersistence = false
+        }
     }
 
     // MARK: - Display Assignments
@@ -512,14 +517,23 @@ final class DisplayLayoutStore {
 
     private func load() {
         guard let data = try? Data(contentsOf: displayFileURL) else { return }
-        guard let decoded = try? JSONDecoder().decode([DisplayRecord].self, from: data) else { return }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let decoded = try? decoder.decode([DisplayRecord].self, from: data) else { return }
+        var didMigrate = false
         recordsByID = Dictionary(
             uniqueKeysWithValues: decoded.map { record in
                 var migratedRecord = record
-                migratedRecord.layoutID = RegionLayouts.canonicalLayoutID(for: record.layoutID)
+                migratedRecord.layoutID = RegionLayouts.migratedLayoutID(for: record.layoutID)
+                if migratedRecord.layoutID != record.layoutID {
+                    didMigrate = true
+                }
                 return (migratedRecord.displayID, migratedRecord)
             }
         )
+        if didMigrate {
+            persist()
+        }
     }
 
     private func persist() {
@@ -534,14 +548,20 @@ final class DisplayLayoutStore {
     private func loadLayouts() {
         guard let data = try? Data(contentsOf: layoutsFileURL) else { return }
         guard let decoded = try? JSONDecoder().decode([RegionLayout].self, from: data) else { return }
+        var didMigrate = false
         let custom = Dictionary(uniqueKeysWithValues: decoded.compactMap { layout -> (String, RegionLayout)? in
-            let canonicalID = RegionLayouts.canonicalLayoutID(for: layout.id)
+            let canonicalID = RegionLayouts.migratedLayoutID(for: layout.id)
 
-            // Retired built-in IDs are intentionally replaced by the new built-in catalog,
-            // so skip their persisted geometry instead of letting stale defaults override
-            // the current shipped layouts.
-            if layout.id != canonicalID, builtInLayoutIDs.contains(canonicalID) {
+            // Built-in definitions are owned by the current app build. Persisted copies may
+            // contain stale geometry or region IDs from an older version, so never let them
+            // override the shipped definitions.
+            if builtInLayoutIDs.contains(canonicalID) {
+                didMigrate = true
                 return nil
+            }
+
+            if canonicalID != layout.id {
+                didMigrate = true
             }
 
             let migratedLayout = RegionLayout(
@@ -553,6 +573,9 @@ final class DisplayLayoutStore {
         })
         // Merge persisted over defaults to keep user-created layouts.
         layoutsByID.merge(custom, uniquingKeysWith: { _, persisted in persisted })
+        if didMigrate {
+            layoutsNeedMigrationPersistence = true
+        }
     }
 
     private func loadCatalog() {
@@ -564,7 +587,7 @@ final class DisplayLayoutStore {
     private func reconcileCatalog() {
         var seen = Set<String>()
         var reconciled = catalogEntries.compactMap { entry -> PersistedLayoutCatalogEntry? in
-            let canonicalID = RegionLayouts.canonicalLayoutID(for: entry.layoutID)
+            let canonicalID = RegionLayouts.migratedLayoutID(for: entry.layoutID)
             guard layoutsByID[canonicalID] != nil, seen.insert(canonicalID).inserted else { return nil }
             return PersistedLayoutCatalogEntry(
                 layoutID: canonicalID,

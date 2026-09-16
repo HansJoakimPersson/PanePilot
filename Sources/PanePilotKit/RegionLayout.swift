@@ -81,8 +81,8 @@ enum RegionLayouts {
         id: "widescreen-tall-mirror",
         name: "Widescreen Right",
         regions: [
-            .init(id: 1, name: "Lower Stack", normalizedFrame: CGRect(x: 0, y: 0, width: 1.0 / 3.0, height: 0.5)),
-            .init(id: 2, name: "Upper Stack", normalizedFrame: CGRect(x: 0, y: 0.5, width: 1.0 / 3.0, height: 0.5)),
+            .init(id: 1, name: "Upper Stack", normalizedFrame: CGRect(x: 0, y: 0.5, width: 1.0 / 3.0, height: 0.5)),
+            .init(id: 2, name: "Lower Stack", normalizedFrame: CGRect(x: 0, y: 0, width: 1.0 / 3.0, height: 0.5)),
             .init(id: 3, name: "Main Pane", normalizedFrame: CGRect(x: 1.0 / 3.0, y: 0, width: 2.0 / 3.0, height: 1)),
         ]
     )
@@ -100,10 +100,10 @@ enum RegionLayouts {
 
     /// Returns the built-in layout with the given ID, after applying legacy ID mapping.
     ///
-    /// Pass any raw ID — including legacy aliases handled by `canonicalLayoutID(for:)` — and
+    /// Pass any raw ID — including legacy aliases handled by `migratedLayoutID(for:)` — and
     /// this method resolves it to the current built-in, or returns `nil` if no match exists.
     static func find(by id: String) -> RegionLayout? {
-        let normalizedID = canonicalLayoutID(for: id)
+        let normalizedID = migratedLayoutID(for: id)
         return all.first { $0.id == normalizedID }
     }
 
@@ -112,8 +112,8 @@ enum RegionLayouts {
     /// Maps legacy or alternate layout IDs to the canonical current ID.
     ///
     /// Earlier versions of PanePilot used different ID strings for the built-in layouts.
-    /// This mapping keeps saved preferences valid across updates without requiring a migration.
-    static func canonicalLayoutID(for id: String) -> String {
+    /// This mapping is used while migrating persisted JSON from older releases.
+    static func migratedLayoutID(for id: String) -> String {
         switch id.lowercased() {
         case "split-20-80":
             return split40x60.id
@@ -140,6 +140,14 @@ enum RegionLayouts {
         }
     }
 
+    /// Temporary compatibility shim for callers that still use the pre-migration name.
+    ///
+    /// - Deprecated: Remove in the next release after persisted JSON migration has shipped.
+    @available(*, deprecated, message: "Use migratedLayoutID(for:) instead; remove this compatibility shim in the next release.")
+    static func canonicalLayoutID(for id: String) -> String {
+        migratedLayoutID(for: id)
+    }
+
     /// Builds a `RegionLayout` composed of full-height columns with the given fractional widths.
     ///
     /// `columnFractions` need not sum to 1 — they are normalised internally. For example,
@@ -149,8 +157,10 @@ enum RegionLayouts {
         let total = columnFractions.reduce(0, +)
         let normalized = total > 0 ? columnFractions.map { $0 / total } : [1.0]
 
+        // Build and number columns from left to right.
         var x: CGFloat = 0
         var regions: [RegionLayout.Region] = []
+
         for (index, width) in normalized.enumerated() {
             let region = RegionLayout.Region(
                 id: index + 1,

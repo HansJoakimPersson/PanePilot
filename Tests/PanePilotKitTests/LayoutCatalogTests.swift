@@ -48,6 +48,59 @@ final class LayoutCatalogTests: XCTestCase {
         XCTAssertFalse(rewrittenCatalog.contains("isFavorite"))
     }
 
+    func testPersistedBuiltInLayoutDoesNotOverrideCurrentDefinition() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PanePilotBuiltInLayoutTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let staleLayout = RegionLayout(
+            id: RegionLayouts.widescreenTall.id,
+            name: RegionLayouts.widescreenTall.name,
+            regions: [
+                .init(id: 1, name: "Main Pane", normalizedFrame: CGRect(x: 0, y: 0, width: 2.0 / 3.0, height: 1)),
+                .init(id: 2, name: "Upper Stack", normalizedFrame: CGRect(x: 2.0 / 3.0, y: 0.5, width: 1.0 / 3.0, height: 0.5)),
+                .init(id: 3, name: "Lower Stack", normalizedFrame: CGRect(x: 2.0 / 3.0, y: 0, width: 1.0 / 3.0, height: 0.5)),
+            ]
+        )
+        let encoder = JSONEncoder()
+        try encoder.encode([staleLayout]).write(to: directory.appendingPathComponent("layouts.json"))
+
+        let store = makeStore(at: directory)
+        let loaded = try XCTUnwrap(store.allLayouts().first(where: { $0.id == staleLayout.id }))
+        let upperPane = try XCTUnwrap(loaded.regions.first(where: { $0.name == "Upper Stack" }))
+        let lowerPane = try XCTUnwrap(loaded.regions.first(where: { $0.name == "Lower Stack" }))
+
+        XCTAssertEqual(upperPane.id, 2)
+        XCTAssertEqual(lowerPane.id, 3)
+    }
+
+    func testLegacyDisplayLayoutIDsAreMigratedToDisk() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PanePilotDisplayMigrationTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let legacyRecord = DisplayRecord(
+            displayID: "display-1",
+            name: "Test Display",
+            isConnected: false,
+            lastSeenAt: Date(timeIntervalSince1970: 0),
+            layoutID: "wide"
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([legacyRecord]).write(to: directory.appendingPathComponent("display-layouts.json"))
+
+        _ = makeStore(at: directory)
+
+        let migratedData = try Data(contentsOf: directory.appendingPathComponent("display-layouts.json"))
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let migratedRecords = try decoder.decode([DisplayRecord].self, from: migratedData)
+        XCTAssertEqual(migratedRecords.first?.layoutID, RegionLayouts.split60x40.id)
+    }
+
     func testHiddenLayoutRemainsInCatalogButLeavesPickerOrder() throws {
         let (store, directory) = try makeStore()
         defer { try? FileManager.default.removeItem(at: directory) }
